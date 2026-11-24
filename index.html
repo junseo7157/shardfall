@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SHARDFALL · 파편의 아레나</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700;800;900&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css?v=5">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="lowhp-overlay"></div>
+<div id="tags-layer"></div>
+<div id="dmg-layer"></div>
+<div id="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
+
+<!-- ================= HUD ================= -->
+<div id="hud" class="hidden">
+  <div class="hud-tl">
+    <div class="vitals">
+      <div class="lvl"><span id="lvl-num">1</span><small>레벨</small></div>
+      <div class="bars">
+        <div class="bar hp"><div id="hp-trail"></div><div id="hp-fill"></div><span id="hp-text">100 / 100</span></div>
+        <div class="bar ult"><div id="ult-fill"></div><span id="ult-text">파편 폭풍</span></div>
+      </div>
+    </div>
+    <div id="team"></div>
+  </div>
+
+  <div class="hud-top">
+    <div id="wave-label">스테이지 1</div>
+    <div id="wave-sub"></div>
+    <div id="wave-progress"><div></div></div>
+    <div id="diff-tag"></div>
+  </div>
+
+  <div class="hud-tr">
+    <div id="score">0</div>
+    <div id="combo-box"><span id="combo-mult">×1.0</span><span id="combo-count"></span><div id="combo-timer"><div></div></div></div>
+    <div class="mini-row"><span>파편 <b id="shards-count">0</b></span><span><b id="timer">00:00</b></span><span>처치 <b id="kills">0</b></span></div>
+  </div>
+
+  <div id="boss-bar" class="hidden">
+    <div id="boss-name"></div>
+    <div class="boss-track"><div id="boss-trail"></div><div id="boss-fill"></div><div class="boss-tick"></div></div>
+    <div id="boss-sub"></div>
+  </div>
+
+  <div id="abilities">
+    <div class="ab" id="ab-lmb" data-icon="shard"><div class="ab-icon"></div><div class="ab-cd"></div><span class="ab-cdtext"></span><div class="ab-key">좌클릭</div></div>
+    <div class="ab" id="ab-rmb" data-icon="spear"><div class="ab-icon"></div><div class="ab-cd"></div><span class="ab-cdtext"></span><div class="ab-charge"><div></div></div><div class="ab-key">우클릭</div></div>
+    <div class="ab" id="ab-dash" data-icon="dash"><div class="ab-icon"></div><div class="ab-cd"></div><span class="ab-cdtext"></span><div class="ab-pips"></div><div class="ab-key">Space</div></div>
+    <div class="ab" id="ab-q" data-icon="snow"><div class="ab-icon"></div><div class="ab-cd"></div><span class="ab-cdtext"></span><div class="ab-key">Q</div></div>
+    <div class="ab" id="ab-e" data-icon="meteor"><div class="ab-icon"></div><div class="ab-cd"></div><span class="ab-cdtext"></span><div class="ab-key">E</div></div>
+    <div class="ab ult" id="ab-r" data-icon="burst"><div class="ab-icon"></div><div class="ab-cd"></div><span class="ab-cdtext"></span><div class="ab-key">R</div></div>
+  </div>
+
+  <div id="xp-bar"><div id="xp-fill"></div><span id="xp-text"></span></div>
+  <div id="minimap-wrap"><canvas id="minimap" width="200" height="200"></canvas></div>
+  <div id="upgrade-list"></div>
+  <div id="toasts"></div>
+  <div id="banner"><div class="banner-title"></div><div class="banner-sub"></div></div>
+  <div id="spectate" class="hidden">쓰러졌어요 · 다음 스테이지가 시작되면 다시 일어납니다</div>
+  <div id="pickwait" class="hidden"></div>
+  <div id="fps"></div>
+</div>
+
+<!-- ================= SCREENS ================= -->
+<div id="screens">
+
+  <div id="screen-loading" class="screen active">
+    <div class="loading-box">
+      <div class="logo-wrap small"></div>
+      <div class="loading-track"><div id="loading-fill"></div></div>
+      <div id="loading-text">불러오는 중</div>
+      <div id="loading-error"></div>
+    </div>
+  </div>
+
+  <div id="screen-menu" class="screen">
+    <div class="menu-col">
+      <div class="logo-wrap"></div>
+      <div class="logo-sub">파편의 아레나</div>
+      <nav class="menu-nav">
+        <button class="mi" id="btn-play">혼자 하기</button>
+        <button class="mi" id="btn-coop">같이 하기</button>
+        <button class="mi" id="btn-forge">영혼의 대장간</button>
+        <button class="mi" id="btn-help">조작법</button>
+        <button class="mi" id="btn-settings">설정</button>
+      </nav>
+      <p class="menu-stats">최고 점수 <b id="menu-best">0</b> · 최고 스테이지 <b id="menu-wave">0</b> · 영혼 파편 <b id="menu-shards">0</b></p>
+      <p class="menu-foot">WASD 이동 · 마우스 조준 · 좌클릭 공격 · Space 질주 · Q E R 스킬</p>
+    </div>
+  </div>
+
+  <div id="screen-diff" class="screen dim">
+    <div class="panel wide">
+      <h2>난이도</h2>
+      <p class="lead">적과 보스의 체력, 그리고 그들이 주는 피해가 함께 바뀝니다. 어려울수록 점수와 영혼 파편을 더 받습니다.</p>
+      <div id="diff-list" class="diff-list"></div>
+      <button class="btn ghost" id="btn-diff-back">돌아가기</button>
+    </div>
+  </div>
+
+  <div id="screen-coop" class="screen dim">
+    <div class="panel narrow">
+      <h2>같이 하기</h2>
+      <p class="lead">방을 만들고 링크를 보내면 최대 4명이 함께 싸울 수 있어요.</p>
+      <div id="coop-off" class="notice hidden"></div>
+      <div id="coop-on">
+        <label class="field"><span>이름</span><input id="coop-name" maxlength="12" autocomplete="off" spellcheck="false"></label>
+        <div class="field"><span>색</span><div id="coop-colors" class="swatches"></div></div>
+        <div class="coop-actions">
+          <button class="btn primary" id="btn-host">방 만들기</button>
+          <div class="join-row"><input id="coop-code" maxlength="8" placeholder="방 코드" autocomplete="off" spellcheck="false"><button class="btn" id="btn-join">참가</button></div>
+        </div>
+        <p id="coop-status" class="status"></p>
+      </div>
+      <button class="btn ghost" id="btn-coop-back">돌아가기</button>
+    </div>
+  </div>
+
+  <div id="screen-lobby" class="screen dim">
+    <div class="panel narrow">
+      <h2>대기실</h2>
+      <div class="room-code"><span>방 코드</span><b id="lobby-code">-----</b><button class="btn small" id="btn-copy-code">코드 복사</button></div>
+      <p class="lead small" id="lobby-help">친구가 들어오려면 claude.ai에서 이 게임 페이지의 <b>공유</b>로 친구를 초대해야 해요. 그다음 지금 페이지 링크를 보내거나 방 코드를 알려 주세요.</p>
+      <div class="lobby-diff"><span>난이도</span><div id="lobby-diff" class="seg"></div><em id="lobby-diff-note"></em></div>
+      <ul id="lobby-roster" class="roster"></ul>
+      <p id="lobby-status" class="status"></p>
+      <div class="row-buttons">
+        <button class="btn primary" id="btn-lobby-start">시작</button>
+        <button class="btn ghost" id="btn-lobby-leave">방 나가기</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-forge" class="screen dim">
+    <div class="panel wide">
+      <h2>영혼의 대장간</h2>
+      <p class="lead">판이 끝날 때 받는 영혼 파편으로 영구 강화를 삽니다. 보유 <b id="forge-shards">0</b></p>
+      <div id="forge-list"></div>
+      <button class="btn ghost" id="btn-forge-back">돌아가기</button>
+    </div>
+  </div>
+
+  <div id="screen-help" class="screen dim">
+    <div class="panel wide">
+      <h2>조작법</h2>
+      <div class="help-grid">
+        <div><kbd>W A S D</kbd><span>이동</span></div>
+        <div><kbd>마우스</kbd><span>조준</span></div>
+        <div><kbd>좌클릭 누르기</kbd><span>파편탄 연사</span></div>
+        <div><kbd>우클릭 모으기</kbd><span>파편 창. 오래 모을수록 굵고 아픈 관통 광선</span></div>
+        <div><kbd>Space / Shift</kbd><span>질주. 질주하는 동안은 맞지 않음</span></div>
+        <div><kbd>Q</kbd><span>서리 노바. 주변 적을 얼리고 밀어냄</span></div>
+        <div><kbd>E</kbd><span>운석. 커서 자리에 떨어져 불바다를 남김</span></div>
+        <div><kbd>R</kbd><span>파편 폭풍. 적을 쓰러뜨려 모으는 궁극기</span></div>
+        <div><kbd>1 2 3</kbd><span>카드 고르기. <kbd>F</kbd> 다시 뽑기</span></div>
+        <div><kbd>Esc</kbd><span>일시정지</span></div>
+      </div>
+      <ul class="tips">
+        <li>바닥의 붉은 표시는 곧 공격이 떨어지는 자리입니다.</li>
+        <li>바위 거신의 충격파에는 벌어진 틈이 있습니다. 초록 줄이 그어진 방향이 안전합니다.</li>
+        <li>화염 비룡 이그니스는 머리만 온전히 맞습니다. 몸통에는 피해가 30%만 들어갑니다.</li>
+        <li>보스는 기둥·바위·수정·나무를 부숩니다. 숨어 있던 엄폐물이 사라질 수 있으니 조심하세요. 부서진 지형은 25초 뒤 다시 솟아납니다.</li>
+        <li>방패병은 앞에서 쏜 파편탄을 막습니다. 옆이나 뒤로 돌거나 파편 창·운석으로 뚫으세요.</li>
+        <li>치유사는 주변 적을 회복시키니 먼저 쓰러뜨리세요.</li>
+        <li>금빛 엘리트는 가끔 보물 상자를 떨어뜨립니다.</li>
+        <li>스테이지 사이에는 가운데 제단 위에서 체력이 찹니다.</li>
+        <li>5스테이지마다 보스가 나오고, 15스테이지를 넘기면 승리합니다.</li>
+      </ul>
+      <button class="btn ghost" id="btn-help-back">돌아가기</button>
+    </div>
+  </div>
+
+  <div id="screen-settings" class="screen dim">
+    <div class="panel narrow">
+      <h2>설정</h2>
+      <div class="set-row"><label for="set-master">전체 음량</label><input type="range" id="set-master" min="0" max="1" step="0.05"></div>
+      <div class="set-row"><label for="set-music">음악</label><input type="range" id="set-music" min="0" max="1" step="0.05"></div>
+      <div class="set-row"><label for="set-sfx">효과음</label><input type="range" id="set-sfx" min="0" max="1" step="0.05"></div>
+      <div class="set-row"><label for="set-quality">그래픽</label>
+        <select id="set-quality"><option value="low">낮음</option><option value="medium">보통</option><option value="high">높음</option></select>
+      </div>
+      <div class="set-row"><label for="set-shake">화면 흔들림</label><input type="checkbox" id="set-shake"></div>
+      <div class="set-row"><label for="set-dmgnum">피해 숫자</label><input type="checkbox" id="set-dmgnum"></div>
+      <div class="set-row"><label for="set-fps">FPS 표시</label><input type="checkbox" id="set-fps"></div>
+      <p class="muted small">그래픽을 바꾸면 메뉴에서 바로 다시 불러옵니다.</p>
+      <button class="btn ghost" id="btn-settings-back">돌아가기</button>
+    </div>
+  </div>
+
+  <div id="screen-pause" class="screen dim">
+    <div class="panel narrow">
+      <h2>일시정지</h2>
+      <p id="pause-note" class="muted small"></p>
+      <div id="pause-build"></div>
+      <div class="col-buttons">
+        <button class="btn primary" id="btn-resume">계속하기</button>
+        <button class="btn" id="btn-pause-settings">설정</button>
+        <button class="btn danger" id="btn-quit">포기하고 메뉴로</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-levelup" class="screen dim">
+    <div class="levelup-wrap">
+      <div id="levelup-title">레벨 업</div>
+      <div id="levelup-sub">카드 한 장을 고르세요</div>
+      <div id="levelup-cards"></div>
+      <div id="levelup-odds"></div>
+      <div class="levelup-foot">
+        <button class="btn small" id="btn-reroll">다시 뽑기 <span id="reroll-count">0</span> <kbd>F</kbd></button>
+        <span id="levelup-wait"></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-gameover" class="screen dim">
+    <div class="panel narrow">
+      <h2 id="go-title">패배</h2>
+      <p id="go-sub" class="muted"></p>
+      <div id="go-stats"></div>
+      <p id="go-shards"></p>
+      <div class="col-buttons">
+        <button class="btn primary hidden" id="btn-continue">계속 싸우기 (무한)</button>
+        <button class="btn primary" id="btn-retry">다시 도전</button>
+        <button class="btn" id="btn-go-lobby">대기실로</button>
+        <button class="btn ghost" id="btn-go-menu">메인 메뉴</button>
+      </div>
+      <p id="go-note" class="muted small"></p>
+    </div>
+  </div>
+</div>
+
+<div id="error-box"></div>
+
+<script type="module">
+const setStatus = (t) => { const el = document.getElementById('loading-text'); if (el) el.textContent = t; };
+const setProgress = (p) => { const el = document.getElementById('loading-fill'); if (el) el.style.width = Math.round(p * 100) + '%'; };
+const showError = (msg) => {
+  const el = document.getElementById('loading-error');
+  if (!el) return;
+  el.textContent = '';
+  const a = document.createElement('p'); a.textContent = '게임을 불러오지 못했어요.';
+  const b = document.createElement('small'); b.textContent = msg;
+  const c = document.createElement('p'); c.textContent = '인터넷 연결(3D 엔진을 cdn.jsdelivr.net에서 받습니다)을 확인하고 새로고침해 주세요.';
+  el.append(a, b, c);
+};
+const loadScript = (src) => new Promise((res, rej) => {
+  const s = document.createElement('script');
+  s.src = src; s.async = false;
+  s.onload = res; s.onerror = () => rej(new Error('스크립트를 받지 못함: ' + src));
+  document.head.appendChild(s);
+});
+try {
+  setStatus('3D 엔진 받는 중'); setProgress(0.05);
+  const THREE = await import('three');
+  setProgress(0.2);
+  const [ec, rp, ub, sp, op, bgu] = await Promise.all([
+    import('three/addons/postprocessing/EffectComposer.js'),
+    import('three/addons/postprocessing/RenderPass.js'),
+    import('three/addons/postprocessing/UnrealBloomPass.js'),
+    import('three/addons/postprocessing/ShaderPass.js'),
+    import('three/addons/postprocessing/OutputPass.js'),
+    import('three/addons/utils/BufferGeometryUtils.js'),
+  ]);
+  window.THREE = THREE;
+  window.TA = {
+    EffectComposer: ec.EffectComposer, RenderPass: rp.RenderPass, UnrealBloomPass: ub.UnrealBloomPass,
+    ShaderPass: sp.ShaderPass, OutputPass: op.OutputPass, mergeGeometries: bgu.mergeGeometries,
+  };
+  const files = ['core', 'render', 'world', 'fx', 'audio', 'vis', 'icons', 'upgrades', 'hero', 'projectiles', 'enemies', 'bosses', 'pickups', 'net', 'ui', 'game'];
+  const BUILD = ['localhost', '127.0.0.1'].includes(location.hostname) ? String(Date.now()) : '9';
+  for (let i = 0; i < files.length; i++) {
+    setStatus('게임 데이터 받는 중 · ' + files[i]);
+    await loadScript('js/' + files[i] + '.js?v=' + BUILD);
+    setProgress(0.25 + 0.6 * (i + 1) / files.length);
+  }
+  setStatus('섬을 만드는 중');
+  await new Promise((r) => setTimeout(r, 30));
+  await window.G.boot();
+  setProgress(1);
+} catch (err) {
+  console.error(err);
+  showError(err && err.message ? err.message : String(err));
+}
+</script>
+</body>
+</html>
