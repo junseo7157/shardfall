@@ -31,6 +31,15 @@
     hell: { name: '지옥', k: BASE * 2.38, rw: 2.38, css: 'var(--ruby-l)' },
   };
   Gm.DIFFS = DIFFS;
+  // co-op party scaling, per extra player: the island's area grows with the enemy count (+60%), so
+  // the crowd stays as dense as solo; enemies get +35% health and +12% damage, bosses +90% health
+  const PARTY = (pc) => {
+    const x = U.clamp(pc | 0, 1, 4) - 1;
+    return { pc: x + 1, area: 1 + 0.6 * x, count: 1 + 0.6 * x, hp: 1 + 0.35 * x, dmg: 1 + 0.12 * x, boss: 1 + 0.9 * x };
+  };
+  Gm.PARTY = PARTY;
+  Gm.mapPlayers = 1;
+  const mapScale = (pc) => Math.sqrt(PARTY(pc).area);
   Gm.DIFF_KEYS = ['easy', 'normal', 'hard', 'hell'];
   Gm.diff = 'normal';
   const D = () => DIFFS[Gm.diff] || DIFFS.normal;
@@ -51,6 +60,7 @@
     G.Net.init();
     G.Player = G.Heroes.add('me', { local: true, auth: true, color: G.Settings.color, slot: 0 });
     G.UI.init();
+    G.Touch.init();
     try {
       if (G.Render.renderer.compileAsync) await G.Render.renderer.compileAsync(scene, G.Render.camera);
       else G.Render.renderer.compile(scene, G.Render.camera);
@@ -78,7 +88,7 @@
   Gm.hitstop = (d) => { if (Gm.mode !== 'client') hitstopT = Math.max(hitstopT, d); };
   Gm.slowmo = (d, s) => { slowT = Math.max(slowT, d); slowScale = s; };
   Gm.players = () => Math.max(1, G.Heroes.list.length);
-  Gm.diffDamage = () => (1 + Math.max(0, Gm.wave - 1) * 0.035 + Math.max(0, Gm.wave - FINAL_WAVE) * 0.05) * D().k;
+  Gm.diffDamage = () => (1 + Math.max(0, Gm.wave - 1) * 0.035 + Math.max(0, Gm.wave - FINAL_WAVE) * 0.05) * D().k * PARTY(Gm.players()).dmg;
   Gm.comboMult = () => 1 + Math.min(Gm.combo, 200) / 100;
   // score already carries the difficulty bonus; the flat parts get it here
   Gm.shardsEarned = () => Math.floor(Gm.score / 250) + Math.round((Gm.stats.bosses * 40 + Math.max(0, Gm.wave - 1) * 4) * D().rw);
@@ -136,6 +146,9 @@
     const dk = mode === 'solo' ? G.Settings.diff : G.Net.roomDiff();
     Gm.diff = DIFFS[dk] ? dk : 'normal';
     setupHeroes(mode);
+    // the island is rebuilt wider for a bigger party (and back to normal for solo)
+    Gm.mapPlayers = mode === 'solo' ? 1 : Gm.players();
+    G.World.setScale(mapScale(Gm.mapPlayers));
     for (const h of G.Heroes.list) h.reset();
     G.UI.renderUpgradeList();
     Gm.score = 0; Gm.combo = 0; Gm.comboT = 0; Gm.time = 0; Gm.wave = 0; Gm.endless = false; Gm.menuOpen = false;
@@ -160,8 +173,11 @@
     if (mode !== 'client') nextWave();
     else G.Audio.music('combat');
     if (G.Save.data.runs <= 3) {
-      setTimeout(() => Gm.state === 'playing' && G.UI.toast('왼쪽 버튼을 누르고 있으면 연사, 오른쪽 버튼은 모았다가 놓기', '', 5), 2600);
-      setTimeout(() => Gm.state === 'playing' && G.UI.toast('Space 질주 동안은 맞지 않습니다', '', 5), 3600);
+      const tips = G.Touch.on
+        ? ['파편 창은 누르고 있다가 떼면 나갑니다. 버튼을 끌면 그 방향으로 쏩니다', '질주하는 동안은 맞지 않습니다']
+        : ['왼쪽 버튼을 누르고 있으면 연사, 오른쪽 버튼은 모았다가 놓기', 'Space나 Shift로 질주. 질주하는 동안은 맞지 않습니다'];
+      setTimeout(() => Gm.state === 'playing' && G.UI.toast(tips[0], '', 5), G.Touch.on ? 8000 : 2600);
+      setTimeout(() => Gm.state === 'playing' && G.UI.toast(tips[1], '', 5), G.Touch.on ? 9000 : 3600);
     }
   };
   Gm.pause = function () {
@@ -324,7 +340,7 @@
     sc: Math.floor(Gm.score), cb: Gm.combo, ct: U.r1(Math.max(0, Gm.comboT)), tm: Math.floor(Gm.time),
     lv: Gm.team.lv, xp: Math.floor(Gm.team.xp), xn: Gm.team.xpNext, pq: Gm.team.pq.slice(0, 120), pz: Gm.pickPause ? 1 : 0,
     al: G.World.altarActive ? 1 : 0, hs: U.r2(G.Enemies.hpScale), en: Gm.endless ? 1 : 0,
-    k: Gm.stats.kills, el: Gm.stats.elites, bk: Gm.stats.bosses, mc: Gm.stats.maxCombo,
+    k: Gm.stats.kills, el: Gm.stats.elites, bk: Gm.stats.bosses, mc: Gm.stats.maxCombo, mp: Gm.mapPlayers,
   });
   Gm.applyNetInfo = function (w) {
     const n = U.num;
@@ -349,6 +365,9 @@
     Gm.stats.elites = n(w.el, 0, 0, 1e6) | 0;
     Gm.stats.bosses = n(w.bk, 0, 0, 1e4) | 0;
     Gm.stats.maxCombo = n(w.mc, 0, 0, 1e6) | 0;
+    // the host's island size wins (a guest whose roster differed at the start rebuilds to match)
+    const mp = n(w.mp, 1, 1, 4) | 0;
+    if (mp !== Gm.mapPlayers) { Gm.mapPlayers = mp; G.World.setScale(mapScale(mp)); }
     // heroes: make sure everyone in the roster exists, then take the host's numbers
     const list = G.Net.lobbyList();
     list.forEach((it, i) => {
@@ -386,12 +405,12 @@
   // ---------------- stages ----------------
   function nextWave() {
     Gm.wave++;
-    const n = Gm.wave, pc = Gm.players();
+    const n = Gm.wave, pc = Gm.players(), party = PARTY(pc);
     isBoss = n % 5 === 0;
     ws = 'intro'; waveT = 2.6; spawned = 0; spawnT = 0; chestThisStage = false;
-    budget = Math.round((isBoss ? 8 + n * 2 : 14 + n * 7 + n * n * 0.35) * (1 + 0.6 * (pc - 1)));
+    budget = Math.round((isBoss ? 8 + n * 2 : 14 + n * 7 + n * n * 0.35) * party.count);
     elitesLeft = n >= 3 ? 1 + Math.floor(n / 5) + (pc - 1) : 0;
-    G.Enemies.hpScale = (1 + (n - 1) * 0.15) * (n > FINAL_WAVE ? 1 + (n - FINAL_WAVE) * 0.12 : 1) * (1 + 0.3 * (pc - 1)) * D().k;
+    G.Enemies.hpScale = (1 + (n - 1) * 0.15) * (n > FINAL_WAVE ? 1 + (n - FINAL_WAVE) * 0.12 : 1) * party.hp * D().k;
     G.World.setAltarActive(false);
     for (const h of G.Heroes.list) if (!h.alive && Gm.mode === 'host') h.revive(0.5);
     const title = '스테이지 ' + n;
@@ -445,13 +464,13 @@
         if (isBoss) {
           // after the final stage the bosses come back awakened (stronger every 15 stages)
           const aw = n > FINAL_WAVE ? Math.floor((n - FINAL_WAVE - 1) / FINAL_WAVE) + 1 : 0;
-          G.Bosses.spawn((n / 5 - 1) % 3, (1 + Math.floor((n - 1) / FINAL_WAVE) * 0.8) * (1 + 0.6 * (Gm.players() - 1)) * D().k, aw);
+          G.Bosses.spawn((n / 5 - 1) % 3, (1 + Math.floor((n - 1) / FINAL_WAVE) * 0.8) * PARTY(Gm.players()).boss * D().k, aw);
           spawnT = 6;
         }
       }
     } else if (ws === 'spawn') {
       spawnT -= dt;
-      const cap = Math.min(95, Math.round((26 + n * 6) * (1 + 0.25 * (Gm.players() - 1))));
+      const pc = Gm.players(), cap = Math.min(95 + 10 * (pc - 1), Math.round((26 + n * 6) * (1 + 0.4 * (pc - 1))));
       if (spawnT <= 0 && spawned < budget && G.Enemies.count() < cap) {
         spawnGroup();
         spawnT = isBoss ? U.rand(2.5, 4) : Math.max(0.35, 1.25 - n * 0.06) * U.rand(0.7, 1.3) / Math.sqrt(Gm.players());
@@ -624,6 +643,7 @@
     const realDt = Math.min(0.05, Math.max(0.0001, (now - last) / 1000));
     last = now;
     step(realDt, true);
+    G.Render.adapt(now);
   }
   // co-op keeps running when this tab is hidden (requestAnimationFrame stops there), so a host
   // switching tabs does not freeze everyone else's game
@@ -686,6 +706,7 @@
         }
       }
       if (Gm.inRun()) G.UI.update(realDt);
+      G.Touch.update(realDt);
       G.Render.update(dt, realDt);
       if (doRender) G.Render.render();
     } catch (err) {

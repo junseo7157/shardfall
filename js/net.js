@@ -9,7 +9,9 @@
 // ============================================================
 (() => {
   const G = window.G, U = G.U;
-  const PROTO = 'sf5', TAU = Math.PI * 2, MAX_PLAYERS = 4, EV_MAX = 44, BYTE_CAP = 3900;
+  const PROTO = 'sf6', TAU = Math.PI * 2, MAX_PLAYERS = 4, EV_MAX = 44, BYTE_CAP = 3900;
+  // positions travel as 12 bits: ±81.9 m in 4 cm steps, enough for the widest (4-player) island
+  const POS_O = 81.9, POS_K = 25;
   const enc = new TextEncoder();
   const N = (G.Net = {
     mode: 'solo', status: 'off', room: null, nr: null, code: '', role: null, me: null, hostPeer: null,
@@ -257,7 +259,7 @@
       const f = Math.round((((e.facing % TAU) + TAU) % TAU) / TAU * 63);
       const st = (Math.max(0, E.STATE_KEYS.indexOf(e.state)) & 15) | (e.elite ? 16 : 0);
       // id(2) type+affix(1) x(2) z(2) facing(1) hp(2) flags(1) state+elite(1)
-      s += U.enc(e.id, 2) + U.enc(ti | (af << 4), 1) + U.enc(U.clamp((e.x + 40.9) * 50, 0, 4095), 2) + U.enc(U.clamp((e.z + 40.9) * 50, 0, 4095), 2)
+      s += U.enc(e.id, 2) + U.enc(ti | (af << 4), 1) + U.enc(U.clamp((e.x + POS_O) * POS_K, 0, 4095), 2) + U.enc(U.clamp((e.z + POS_O) * POS_K, 0, 4095), 2)
         + U.enc(f, 1) + U.enc(Math.round(U.clamp(e.hp / e.maxHp, 0, 1) * 4095), 2) + U.enc(fl, 1) + U.enc(st, 1);
       if (s.length >= 960) { out.push(s); s = ''; }
     }
@@ -271,7 +273,7 @@
       if (typeof s !== 'string') continue;
       for (let i = 0; i + 12 <= s.length; i += 12) {
         const tf = U.dec(s, i + 2, 1), sf = U.dec(s, i + 11, 1);
-        out.push({ id: U.dec(s, i, 2), ti: tf & 15, el: !!(sf & 16), af: (tf >> 4) & 3, x: U.dec(s, i + 3, 2) / 50 - 40.9, z: U.dec(s, i + 5, 2) / 50 - 40.9,
+        out.push({ id: U.dec(s, i, 2), ti: tf & 15, el: !!(sf & 16), af: (tf >> 4) & 3, x: U.dec(s, i + 3, 2) / POS_K - POS_O, z: U.dec(s, i + 5, 2) / POS_K - POS_O,
           f: (U.dec(s, i + 7, 1) / 63) * TAU, hp: U.dec(s, i + 8, 2) / 4095, fl: U.dec(s, i + 10, 1), st: sf & 15 });
       }
     }

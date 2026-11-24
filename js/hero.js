@@ -251,7 +251,9 @@
       scene.add(g);
       if (this.local) {
         this.aimLine = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, 0, -0.5),
-          new THREE.MeshBasicMaterial({ color: U.hdr(this.pal.energy, 1.8), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+          new THREE.MeshBasicMaterial({ color: U.hdr(this.pal.energy, 1.8), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
+        // the lance goes through pillars, rocks and hills, so its range line is drawn through them too
+        this.aimLine.renderOrder = 6;
         this.aimLine.visible = false;
         scene.add(this.aimLine);
       }
@@ -441,7 +443,8 @@
     }
     castMeteor(tx, tz) {
       const s = this.stats;
-      tx = U.clamp(tx, -40, 40); tz = U.clamp(tz, -40, 40);
+      const lim = G.World.ARENA_R + 3;
+      tx = U.clamp(tx, -lim, lim); tz = U.clamp(tz, -lim, lim);
       const r = 5 * s.meteorRadius;
       G.Net.vis('meteor', U.r1(tx), U.r1(tz), U.r1(r));
       G.Enemies.later(0.7, () => {
@@ -480,19 +483,30 @@
     controlInput(dt) {
       const s = this.stats, m = I.mouse;
       const locked = G.Game.controlsLocked();
-      G.Render.screenToGround(m.nx, m.ny, this.y + 1.4, _aim);
-      this.aimX = _aim.x; this.aimZ = _aim.z;
+      // phones aim with a thumb stick or auto-aim; desktops aim at the mouse
+      const T = G.Touch && G.Touch.on ? G.Touch : null;
+      let wantFire;
+      if (T) wantFire = T.steer(this);
+      else {
+        G.Render.screenToGround(m.nx, m.ny, this.y + 1.4, _aim);
+        this.aimX = _aim.x; this.aimZ = _aim.z;
+        wantFire = m.left;
+      }
       this.facing = U.dampAngle(this.facing, Math.atan2(this.aimZ - this.z, this.aimX - this.x), 22, dt);
       let ix = 0, iz = 0;
       if (!locked) {
-        if (I.isDown('KeyW', 'ArrowUp')) iz -= 1;
-        if (I.isDown('KeyS', 'ArrowDown')) iz += 1;
-        if (I.isDown('KeyA', 'ArrowLeft')) ix -= 1;
-        if (I.isDown('KeyD', 'ArrowRight')) ix += 1;
+        if (T) { const k = T.walk(); ix = T.mx * k; iz = T.mz * k; }
+        else {
+          if (I.isDown('KeyW', 'ArrowUp')) iz -= 1;
+          if (I.isDown('KeyS', 'ArrowDown')) iz += 1;
+          if (I.isDown('KeyA', 'ArrowLeft')) ix -= 1;
+          if (I.isDown('KeyD', 'ArrowRight')) ix += 1;
+        }
       }
+      // keys give 1 or a diagonal of 1.41; a thumb is already within 1 and keeps its partial push
       const il = Math.hypot(ix, iz);
-      if (il > 0) { ix /= il; iz /= il; }
-      this.moving = il > 0;
+      if (il > 1) { ix /= il; iz /= il; }
+      this.moving = il > 0.01;
       const spd = s.speed * (this.charging ? 0.55 : 1) * (this.ultT > 0 ? 1.15 : 1);
       if (this.dashT > 0) {
         this.dashT -= dt;
@@ -532,8 +546,9 @@
         this.ultReq = performance.now();
         if (this.auth) this.ultStart();
       }
-      this.firing = m.left && !this.charging;
-      if (m.right && this.cd.lance <= 0) {
+      this.firing = wantFire && !this.charging;
+      const lanceHeld = T ? T.lance : m.right;
+      if (lanceHeld && this.cd.lance <= 0) {
         if (!this.charging) { this.charging = true; this.lanceCharge = 0; this.lanceSound = G.Audio.loop(); }
         this.lanceCharge = Math.min(1, this.lanceCharge + dt / 1.1);
         if (this.lanceSound) this.lanceSound.set(this.lanceCharge);
@@ -543,7 +558,7 @@
           G.FX.P.emit(ox + Math.cos(a) * 1.2, this.y + 1.4, oz + Math.sin(a) * 1.2, -Math.cos(a) * 4, 0, -Math.sin(a) * 4, 0.28, 0.3, 0.05, c.r * 2.4, c.g * 2.4, c.b * 2.4, 1, 0, 0);
         }
       }
-      if (this.charging && (!m.right || this.cd.lance > 0)) {
+      if (this.charging && (!lanceHeld || this.cd.lance > 0)) {
         this.charging = false;
         this.stopLanceSound();
         if (this.cd.lance <= 0) {
@@ -721,8 +736,8 @@
     applyNet(a) {
       if (!Array.isArray(a) || a.length < 13) return;
       const N = U.num;
-      this.net = { x: N(a[0], this.x, -40, 40), z: N(a[1], this.z, -40, 40), f: N(a[2], 0, -10, 10), ax: N(a[3], 0, -80, 80), az: N(a[4], 0, -80, 80),
-        fl: N(a[5], 0, 0, 7) | 0, ls: N(a[6]), lc: N(a[7], 0, 0, 1), ns: N(a[8]), ms: N(a[9]), mtx: N(a[10], 0, -40, 40), mtz: N(a[11], 0, -40, 40), us: N(a[12]) };
+      this.net = { x: N(a[0], this.x, -95, 95), z: N(a[1], this.z, -95, 95), f: N(a[2], 0, -10, 10), ax: N(a[3], 0, -140, 140), az: N(a[4], 0, -140, 140),
+        fl: N(a[5], 0, 0, 7) | 0, ls: N(a[6]), lc: N(a[7], 0, 0, 1), ns: N(a[8]), ms: N(a[9]), mtx: N(a[10], 0, -95, 95), mtz: N(a[11], 0, -95, 95), us: N(a[12]) };
     }
     // replay another player's card picks (in order) so this machine knows their stats
     syncPicks(str) {

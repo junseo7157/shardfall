@@ -248,6 +248,20 @@
     },
   });
 
+  // ---------------- device ----------------
+  // Phones and tablets get touch controls, a fitted layout and a lighter renderer. Desktops and
+  // laptops keep everything as it is, even with a touchscreen. ?mobile=1 or ?mobile=0 forces it.
+  (() => {
+    const forced = /[?&]mobile=([01])/.exec(location.search);
+    const ua = navigator.userAgent || '', pts = navigator.maxTouchPoints || 0;
+    const phoneUA = /Android|iPhone|iPad|iPod|Mobile|Silk|Kindle|Opera Mini|IEMobile/i.test(ua);
+    const iPadOS = /Macintosh/.test(ua) && pts > 1;
+    let coarse = false;
+    try { coarse = pts > 0 && matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches; } catch (e) { /* old browser */ }
+    G.Mobile = { on: forced ? forced[1] === '1' : phoneUA || iPadOS || coarse };
+    if (G.Mobile.on) document.documentElement.classList.add('mobile');
+  })();
+
   // ---------------- settings & save ----------------
   function load(key) {
     try { return JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch (e) { return {}; }
@@ -255,7 +269,7 @@
   function store(key, v) {
     try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* ignore */ }
   }
-  const defaultQuality = (navigator.hardwareConcurrency || 8) <= 4 ? 'medium' : 'high';
+  const defaultQuality = G.Mobile.on || (navigator.hardwareConcurrency || 8) <= 4 ? 'medium' : 'high';
   G.Settings = Object.assign(
     { master: 0.8, music: 0.5, sfx: 0.8, quality: defaultQuality, shake: true, dmgNumbers: true, showFps: false, nick: '', color: 0, diff: 'normal' },
     load('shardfall.settings')

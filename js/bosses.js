@@ -7,6 +7,9 @@
 (() => {
   const G = window.G, U = G.U, Geo = G.Geo;
   const B = (G.Bosses = { active: null, targets: [] });
+  // arena-relative distances: a co-op island is wider (G.World.S), so the bosses roam and reach further
+  const LIM = (m = 3) => G.World.ARENA_R - m;
+  const WS = () => G.World.S;
   let scene;
   const Sph = (r, w = 12, h = 10) => new THREE.SphereGeometry(r, w, h);
   const Box = (x, y, z) => new THREE.BoxGeometry(x, y, z);
@@ -178,7 +181,7 @@
     }
     netApply(a) {
       const N = U.num;
-      this.nx = N(a[1], this.x, -60, 60); this.nz = N(a[2], this.z, -60, 60); this.ny = N(a[3], 0, -10, 40); this.nf = N(a[4], 0, -20, 20);
+      this.nx = N(a[1], this.x, -95, 95); this.nz = N(a[2], this.z, -95, 95); this.ny = N(a[3], 0, -10, 40); this.nf = N(a[4], 0, -20, 20);
       const hp = N(a[5], this.hp, 0, 1e8);
       if (hp < this.hp - 0.5 && this.alive) {
         G.FX.dmgNumber(this.x, this.y + 3, this.z, Math.round(this.hp - hp), '');
@@ -266,7 +269,7 @@
           const g = g0 + (aw ? (k % 2) * 0.55 : k * 0.5);
           rg.push([R2(this.stateT + k * gap), 0.44, R2(g), R2(g + Math.PI)]);
         }
-        G.Patterns.start('colrings', { x: R1(this.x), z: R1(this.z), rg, v: aw ? 9 : 8, mx: aw ? 26 : 22, d: R1(14 * this.dk), c: this.pal.ring });
+        G.Patterns.start('colrings', { x: R1(this.x), z: R1(this.z), rg, v: aw ? 9 : 8, mx: R1((aw ? 26 : 22) * WS()), d: R1(14 * this.dk), c: this.pal.ring });
       }
       if (a === 'toss') { this.stateT = 0.7 * (aw ? 0.85 : 1); this.tossN = (P2 ? 5 : 3) + (aw ? 2 : 0); }
       if (a === 'charge') this.startCharge(P, (P2 ? 0.75 : 0.95) * (aw ? 0.85 : 1));
@@ -311,7 +314,7 @@
             const h = (i === 0 ? P : hs[i % Math.max(1, hs.length)]) || P;
             if (!h) break;
             const lead = i === 0 ? 0 : 1;
-            const tx = U.clamp(h.x + h.vx * 0.9 * lead + U.rand(-3, 3) * lead, -34, 34), tz = U.clamp(h.z + h.vz * 0.9 * lead + U.rand(-3, 3) * lead, -34, 34);
+            const tx = U.clamp(h.x + h.vx * 0.9 * lead + U.rand(-3, 3) * lead, -LIM(), LIM()), tz = U.clamp(h.z + h.vz * 0.9 * lead + U.rand(-3, 3) * lead, -LIM(), LIM());
             G.Patterns.start('boulder', { sx: R1(this.x), sz: R1(this.z), sy: R1(this.y + 5), tx: R1(tx), tz: R1(tz), du: R2(1.1 + i * 0.18), h: 9, r: 2.6, d: R1(22 * this.dk), s: 1.1,
               c: this.pal.rock, fz: this.aw ? 1.8 : 0, fzd: R1(8 * this.dk) });
           }
@@ -470,12 +473,12 @@
             this.zoneN++;
             const hs = G.Heroes.alive(), h = hs[this.zoneN % hs.length] || P;
             const spread = this.zoneN > hs.length ? 5 : 0;
-            const tx = U.clamp(h.x + h.vx * 0.5 + U.rand(-spread, spread), -34, 34), tz = U.clamp(h.z + h.vz * 0.5 + U.rand(-spread, spread), -34, 34);
+            const tx = U.clamp(h.x + h.vx * 0.5 + U.rand(-spread, spread), -LIM(), LIM()), tz = U.clamp(h.z + h.vz * 0.5 + U.rand(-spread, spread), -LIM(), LIM());
             G.Patterns.start('zone', { x: R1(tx), z: R1(tz), r: this.aw ? 3.2 : 2.8, dl: 1.15, d: R1(22 * this.dk), c: this.pal.zone, br: 1 });
           }
         } else if (this.state === 'teleport') {
           if (this.stateT <= 0) {
-            const p = G.World.randomOpenPoint(6, 30, 2);
+            const p = G.World.randomOpenPoint(6, LIM(7), 2);
             if (U.dist(p.x, p.z, P.x, P.z) > 9) { this.x = p.x; this.z = p.z; }
             G.Net.vis('warp', R1(this.x), R1(this.z), this.color);
             // awakened: the spot it left bursts a moment later
@@ -485,7 +488,7 @@
           if (this.stateT <= 0) {
             const n = this.aw ? 6 : 4;
             for (let i = 0; i < n; i++) {
-              const p = G.World.randomOpenPoint(8, 30, 1);
+              const p = G.World.randomOpenPoint(8, LIM(7), 1);
               G.Enemies.spawn(this.aw ? ['caster', 'wraith', 'sniper'][i % 3] : i % 2 ? 'caster' : 'wraith', p.x, p.z);
             }
           }
@@ -566,7 +569,7 @@
     intro(dt) {
       this.stateT -= dt;
       this.orbitA += dt * 0.5;
-      this.steer(Math.cos(this.orbitA) * 26, Math.sin(this.orbitA) * 26, 16, dt);
+      this.steer(Math.cos(this.orbitA) * 26 * WS(), Math.sin(this.orbitA) * 26 * WS(), 16, dt);
       if (this.stateT <= 0) {
         this.invuln = false; this.state = 'idle'; this.cool = 1.5;
         G.Net.vis('toast', '머리를 맞혀야 제대로 들어갑니다', 'gold');
@@ -598,7 +601,7 @@
       for (let i = 0; i < n; i++) {
         const h = (i === 0 ? P : hs[i % Math.max(1, hs.length)]) || P;
         const sp = i === 0 ? 0.6 : 4;
-        const tx = U.clamp(h.x + h.vx * 0.7 + U.rand(-sp, sp), -33, 33), tz = U.clamp(h.z + h.vz * 0.7 + U.rand(-sp, sp), -33, 33);
+        const tx = U.clamp(h.x + h.vx * 0.7 + U.rand(-sp, sp), -LIM(4), LIM(4)), tz = U.clamp(h.z + h.vz * 0.7 + U.rand(-sp, sp), -LIM(4), LIM(4));
         G.Patterns.start('boulder', { sx: R1(this.x), sz: R1(this.z), sy: R1(this.hy + 1), tx: R1(tx), tz: R1(tz), du: R2(0.95 + i * 0.14), h: 6, r: 1.8, d: R1(16 * this.dk), s: 0.7,
           c: this.pal.fire, cr: aw ? 8.5 : 7, ca: R2(i % 2 ? Math.PI / 4 : 0), cd: R1(14 * this.dk) });
       }
@@ -610,7 +613,7 @@
       this.breathing = false;
       if (this.state === 'idle') {
         this.orbitA += this.orbitDir * dt * (sp / 24);
-        const R = 22 + Math.sin(this.t * 0.5) * 6;
+        const R = (22 + Math.sin(this.t * 0.5) * 6) * WS();
         this.steer(Math.cos(this.orbitA) * R, Math.sin(this.orbitA) * R, sp, dt);
         this.fireT -= dt;
         if (this.fireT <= 0 && P) {
@@ -697,7 +700,7 @@
       } else if (this.state === 'rain') {
         this.stateT -= dt;
         this.orbitA += this.orbitDir * dt * 0.5;
-        this.steer(Math.cos(this.orbitA) * 26, Math.sin(this.orbitA) * 26, sp, dt);
+        this.steer(Math.cos(this.orbitA) * 26 * WS(), Math.sin(this.orbitA) * 26 * WS(), sp, dt);
         this.rainT -= dt;
         if (this.rainT <= 0 && this.rainN < (aw ? 16 : 11) && P) {
           this.rainT = aw ? 0.12 : 0.15;
@@ -705,7 +708,7 @@
           const hs = G.Heroes.alive(), h = hs[this.rainN % hs.length] || P;
           // every third rock goes where its target is heading
           const aim = this.rainN % 3 === 0, s = aim ? 0.8 : 7;
-          const tx = U.clamp(h.x + (aim ? h.vx * 1.1 : 0) + U.rand(-s, s), -34, 34), tz = U.clamp(h.z + (aim ? h.vz * 1.1 : 0) + U.rand(-s, s), -34, 34);
+          const tx = U.clamp(h.x + (aim ? h.vx * 1.1 : 0) + U.rand(-s, s), -LIM(), LIM()), tz = U.clamp(h.z + (aim ? h.vz * 1.1 : 0) + U.rand(-s, s), -LIM(), LIM());
           G.Patterns.start('boulder', { sx: R1(tx + 10), sz: R1(tz - 6), sy: 32, tx: R1(tx), tz: R1(tz), du: 1.25, h: 0, r: 2.3, d: R1(20 * dk), s: 0.9, c: pal.rock, fz: aw ? 1.8 : 1.4, fzd: R1(8 * dk) });
         }
         if (this.stateT <= 0) this.endAttack(1.5);
@@ -730,7 +733,7 @@
         this.coilT += dt;
         if (U.dist(this.x, this.z, gx, gz) < 2.5 || this.coilT > 1.6) {
           this.coilPh = 1; this.coilT = 0; this.coilR = R;
-          this.cx = U.clamp(P.x, -28, 28); this.cz = U.clamp(P.z, -28, 28);
+          this.cx = U.clamp(P.x, -LIM(9), LIM(9)); this.cz = U.clamp(P.z, -LIM(9), LIM(9));
           this.coilA = Math.atan2(this.z - this.cz, this.x - this.cx);
           this.coilDir = U.chance(0.5) ? 1 : -1;
           this.coilV = (aw ? 32 : 28) * this.spk;
@@ -763,8 +766,10 @@
         if (U.dist(this.x, this.z, 0, 0) < 5 || this.stateT < 4.6) {
           this.infSet = true; this.stateT = 4.4;
           this.infA = Math.atan2(this.z, this.x);
-          const off = Math.random() * U.TAU, rg = [[1.0, 7, 7, R2(off)], [1.9, 14, 11, R2(off + 0.3)], [2.8, 21, 15, R2(off)]];
-          if (aw) rg.push([3.7, 28, 19, R2(off + 0.2)]);
+          // rings of eruptions sized to the island, so a wide co-op arena gets the same coverage
+          const s = WS(), ring = (d, r, n, a) => [d, R1(r * s), Math.round(n * s), R2(a)];
+          const off = Math.random() * U.TAU, rg = [ring(1.0, 7, 7, off), ring(1.9, 14, 11, off + 0.3), ring(2.8, 21, 15, off)];
+          if (aw || s > 1.3) rg.push(ring(3.7, 28, 19, off + 0.2));
           G.Patterns.start('erupt', { x: 0, z: 0, r: 2.4, d: R1(22 * dk), c: pal.zone, rg });
           G.Patterns.start('spiral', { x: 0, z: 0, a0: R2(off), ar: aw ? 4 : 3, iv: 0.16, rs: 1.3, rv: aw ? 1 : 0, du: 3.8, v: 8, d: R1(12 * dk), r: 0.42, c: pal.fire });
           G.Net.vis('ring', 0, 0, 1, 10, 0.6, this.color);

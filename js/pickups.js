@@ -214,9 +214,11 @@
   };
 
   // ---------- co-op sync ----------
+  // positions as 12 bits over ±81.9 m (same packing as the enemies in net.js)
+  const PO = 81.9, PKK = 25;
   PK.netOrbs = function () {
     let s = '';
-    for (const o of PK.orbs) s += U.enc(o.id, 2) + (o.kind === 'heal' ? 'h' : 'm') + U.enc((o.x + 41) * 50, 2) + U.enc((o.z + 41) * 50, 2);
+    for (const o of PK.orbs) s += U.enc(o.id, 2) + (o.kind === 'heal' ? 'h' : 'm') + U.enc(U.clamp((o.x + PO) * PKK, 0, 4095), 2) + U.enc(U.clamp((o.z + PO) * PKK, 0, 4095), 2);
     return s;
   };
   PK.netChests = () => PK.chests.filter((c) => c.openT < 1.2).map((c) => [c.id, U.r1(c.x), U.r1(c.z), TIERS.indexOf(c.tier), c.open ? 1 : 0]);
@@ -225,7 +227,7 @@
     if (typeof orbStr === 'string') {
       for (let i = 0; i + 7 <= orbStr.length && i < 7 * MAXO; i += 7) {
         const id = U.dec(orbStr, i, 2), kind = orbStr[i + 2] === 'h' ? 'heal' : 'magnet';
-        const x = U.dec(orbStr, i + 3, 2) / 50 - 41, z = U.dec(orbStr, i + 5, 2) / 50 - 41;
+        const x = U.dec(orbStr, i + 3, 2) / PKK - PO, z = U.dec(orbStr, i + 5, 2) / PKK - PO;
         seen.add(id);
         let o = PK.orbs.find((q) => q.id === id);
         if (!o) { o = { id, kind, x, z, y: G.World.heightAt(x, z) + 0.6, t: 0 }; PK.orbs.push(o); }
@@ -238,7 +240,7 @@
       if (!Array.isArray(a)) continue;
       const id = U.num(a[0], -1) | 0;
       let c = PK.chests.find((q) => q.id === id);
-      if (!c) c = makeChest(id, U.num(a[1], 0, -40, 40), U.num(a[2], 0, -40, 40), TIERS[U.num(a[3], 0, 0, 1) | 0] || 'rare', true);
+      if (!c) c = makeChest(id, U.num(a[1], 0, -95, 95), U.num(a[2], 0, -95, 95), TIERS[U.num(a[3], 0, 0, 1) | 0] || 'rare', true);
       if (a[4] && !c.open) c.open = true;
     }
   };

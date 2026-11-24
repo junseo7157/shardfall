@@ -105,12 +105,38 @@
   const _plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const _ndc = new THREE.Vector2();
 
+  R.dyn = 1;
   R.pixelRatio = function () {
     const Q = R.Q;
-    return Math.max(0.6, Math.min(Q.pr, Math.sqrt(Q.maxPix / (innerWidth * innerHeight))));
+    return Math.max(0.5, Math.min(Q.pr, Math.sqrt(Q.maxPix / (innerWidth * innerHeight))) * R.dyn);
+  };
+  // Phones only: drop the render resolution while the frame rate is low and win it back when it
+  // recovers. A drop that buys nothing (a phone capped at 30 fps) is undone and not tried again.
+  const dyn = { t0: 0, n: 0, cool: 4, lock: false, before: 0 };
+  R.adapt = function (now) {
+    if (!G.Mobile.on || !R.renderer) return;
+    if (!dyn.t0) { dyn.t0 = now; return; }
+    dyn.n++;
+    const el = (now - dyn.t0) / 1000;
+    if (el < 2) return;
+    const fps = dyn.n / el;
+    dyn.t0 = now; dyn.n = 0; dyn.cool -= el;
+    if (document.hidden || dyn.cool > 0) return;
+    let next = R.dyn;
+    if (dyn.before && fps < dyn.before + 3) { next = Math.min(1, R.dyn / 0.85); dyn.lock = true; }
+    else if (fps < 42 && R.dyn > 0.6 && !dyn.lock) next = Math.max(0.6, R.dyn * 0.85);
+    else if (fps > 57 && R.dyn < 1) next = Math.min(1, R.dyn * 1.12);
+    dyn.before = next < R.dyn ? fps : 0;
+    if (Math.abs(next - R.dyn) > 0.01) { R.dyn = next; dyn.cool = 3; R.resize(); }
   };
   R.init = function (canvas) {
-    const Q = (R.Q = QUALITY[G.Settings.quality] || QUALITY.high);
+    const base = QUALITY[G.Settings.quality] || QUALITY.high;
+    // phones: no MSAA, lighter grass and shadows, a resolution cap that suits a small sharp screen
+    const Q = (R.Q = G.Mobile.on ? Object.assign({}, base, {
+      samples: 0, grass: Math.round(base.grass * 0.55), shadowSize: 1024,
+      pr: Math.min(window.devicePixelRatio || 1, base === QUALITY.low ? 1 : base === QUALITY.medium ? 1.25 : 1.5),
+      maxPix: Math.min(base.maxPix, 1.6e6),
+    }) : base);
     const renderer = (R.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false }));
     renderer.setPixelRatio(R.pixelRatio());
     renderer.setSize(innerWidth, innerHeight);

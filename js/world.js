@@ -4,18 +4,22 @@
 (() => {
   const G = window.G, U = G.U, N = G.Noise;
   const W = (G.World = {});
-  W.ARENA_R = 37;
+  // S scales the island's width for co-op (1 for one player); props keep their size, the land spreads out
+  const BASE_R = 37;
+  W.S = 1;
+  W.ARENA_R = BASE_R;
   W.obstacles = [];
   W.altar = { x: 0, z: 0, r: 4.6 };
 
-  const HF_HALF = 56, HF_STEP = 0.5, HF_RES = Math.round((HF_HALF * 2) / HF_STEP) + 1;
+  const HF_STEP = 0.5;
+  let HF_HALF = 56, HF_RES = Math.round((HF_HALF * 2) / HF_STEP) + 1;
   let hf = null;
 
-  function edgeR(th) { return 47 + N.fbm(Math.cos(th) * 1.7 + 4, Math.sin(th) * 1.7 - 2, 3) * 4; }
+  function edgeR(th) { return (47 + N.fbm(Math.cos(th) * 1.7 + 4, Math.sin(th) * 1.7 - 2, 3) * 4) * W.S; }
   function pathMask(x, z) {
     const r = Math.hypot(x, z), th = Math.atan2(z, x);
     const wob = N.simplex2(x * 0.15, z * 0.15) * 0.9;
-    let m = 1 - Math.abs(r - 12.5 + wob) / 1.5;
+    let m = 1 - Math.abs(r - 12.5 * W.S + wob) / 1.5;
     if (r > 6 && r < W.ARENA_R - 2) {
       for (let k = 0; k < 4; k++) {
         const a = U.angleDiff(th, k * Math.PI / 2);
@@ -131,7 +135,7 @@
 
   // ---------- island ----------
   function buildIsland(scene) {
-    const RINGS = 70, SEG = 200;
+    const RINGS = Math.round(70 * W.S), SEG = Math.round(200 * Math.sqrt(W.S));
     const verts = [], cols = [], idx = [];
     const cGrassA = new THREE.Color(0x3a7a58), cGrassB = new THREE.Color(0x62a35c), cGrassC = new THREE.Color(0x9aa64e);
     const cPath = new THREE.Color(0x8c6a52), cStone = new THREE.Color(0x8d8aa6), cRock = new THREE.Color(0x6d6684), cLip = new THREE.Color(0x6b4a3c);
@@ -221,10 +225,12 @@
       return o;
     };
     const tag = (g, o, vanish) => { g.userData.ob = [o.i, vanish ? 1 : 0, o.x, o.y, o.z]; return g; };
+    // a wider co-op island gets more cover, about as dense as the solo one (within the shader's 64 slots)
+    const S = W.S, more = Math.min(S * S, 1.75), RIM = Math.round(64 * S);
 
     // rim rocks
-    for (let i = 0; i < 64; i++) {
-      const th = (i / 64) * U.TAU + rnd() * 0.08;
+    for (let i = 0; i < RIM; i++) {
+      const th = (i / RIM) * U.TAU + rnd() * 0.08;
       const r = W.ARENA_R + 3 + rnd() * 6;
       const s = 1.5 + rnd() * 2.6;
       const x = Math.cos(th) * r, z = Math.sin(th) * r;
@@ -234,7 +240,7 @@
     // pillars ring
     for (let k = 0; k < 8; k++) {
       const th = k * Math.PI / 4 + Math.PI / 8;
-      const x = Math.cos(th) * 21, z = Math.sin(th) * 21, y = W.heightAt(x, z);
+      const x = Math.cos(th) * 21 * S, z = Math.sin(th) * 21 * S, y = W.heightAt(x, z);
       const broken = k % 3 === 1;
       const H = broken ? 2 + rnd() * 1.5 : 4.5 + rnd() * 2.5;
       const o = addOb(x, z, 1.35, 'pillar', 0xa8a4be);
@@ -249,7 +255,7 @@
       runes.push(tag(place(new THREE.TorusGeometry(0.86, 0.06, 6, 28), x, y + 1.7, z, Math.PI / 2, 0, 0), o));
     }
     // crystal clusters
-    for (let n = 0, tries = 0; n < 7 && tries < 400; tries++) {
+    for (let n = 0, tries = 0, want = Math.round(7 * more); n < want && tries < 400 * more; tries++) {
       const th = rnd() * U.TAU, r = 10 + rnd() * (W.ARENA_R - 14);
       const x = Math.cos(th) * r, z = Math.sin(th) * r;
       if (!canPlace(x, z, 1.7, 3.5) || pathMask(x, z) > 0.2) continue;
@@ -265,7 +271,7 @@
       rocks.push(tag(colorize(place(rockGeo(1, rnd() * 50), x, y, z, 0, rnd() * 6, 0, 1.7, 0.6, 1.7), 0x4d4766, 0.08), o));
     }
     // boulders
-    for (let n = 0, tries = 0; n < 9 && tries < 400; tries++) {
+    for (let n = 0, tries = 0, want = Math.round(9 * more); n < want && tries < 400 * more; tries++) {
       const th = rnd() * U.TAU, r = 10 + rnd() * (W.ARENA_R - 13);
       const x = Math.cos(th) * r, z = Math.sin(th) * r, s = 1.1 + rnd() * 1.3;
       if (!canPlace(x, z, s, 3) || pathMask(x, z) > 0.3) continue;
@@ -274,7 +280,7 @@
       rocks.push(tag(colorize(place(rockGeo(1, rnd() * 50), x, W.heightAt(x, z) + s * 0.3, z, rnd() * 0.5, rnd() * 6, rnd() * 0.5, s * 1.1, s, s), 0x77708e, 0.08, 0x5a9a5e), o));
     }
     // trees
-    for (let n = 0, tries = 0; n < 11 && tries < 500; tries++) {
+    for (let n = 0, tries = 0, want = Math.round(11 * more); n < want && tries < 500 * more && W.obstacles.length < OBS_MAX - 4; tries++) {
       const th = rnd() * U.TAU, r = 11 + rnd() * (W.ARENA_R - 12);
       const x = Math.cos(th) * r, z = Math.sin(th) * r;
       if (!canPlace(x, z, 0.8, 3.2) || pathMask(x, z) > 0.2) continue;
@@ -342,8 +348,10 @@
     mk(violetC, 0xe89a38);
     const runeMesh = new THREE.Mesh(mergeTagged(runes.map((g) => colorize(g, 0xffffff, 0))), obsMat(new THREE.MeshBasicMaterial({ color: U.hdr(0xffcf7a, 1.7) })));
     scene.add(runeMesh);
+  }
 
-    // altar ring + central shard
+  // ---------- things that never change size: the altar's glow, the central shard, the sky ----------
+  function buildStatic(scene) {
     W.altarRingMat = new THREE.MeshBasicMaterial({ color: U.hdr(0xffcf7a, 1.2), transparent: true, opacity: 0.9 });
     const ring = new THREE.Mesh(new THREE.TorusGeometry(4.55, 0.09, 8, 80), W.altarRingMat);
     ring.rotation.x = Math.PI / 2; ring.position.y = 0.45;
@@ -364,6 +372,7 @@
     W.shardLight = new THREE.PointLight(0xa9c4ff, 40, 22, 2);
     W.shardLight.position.set(0, 4, 0);
     scene.add(W.shardLight);
+    buildAmbience(scene);
   }
 
   // ---------- grass & flowers ----------
@@ -411,7 +420,7 @@
     let n = 0, guard = 0;
     const c = new THREE.Color();
     while (n < count && guard++ < count * 6) {
-      const th = Math.random() * U.TAU, r = Math.sqrt(Math.random()) * (W.ARENA_R + 6);
+      const th = Math.random() * U.TAU, r = Math.sqrt(Math.random()) * (W.ARENA_R + 6 * W.S);
       const x = Math.cos(th) * r, z = Math.sin(th) * r;
       if (r < 6.3 || pathMask(x, z) > 0.35) continue;
       let blocked = false;
@@ -477,18 +486,9 @@
       scene.add(m);
     }
 
-    // fireflies (GPU animated)
-    const FF = 260, p = new Float32Array(FF * 3), sd = new Float32Array(FF * 3);
-    for (let i = 0; i < FF; i++) {
-      const th = Math.random() * U.TAU, r = Math.sqrt(Math.random()) * (W.ARENA_R + 4);
-      p[i * 3] = Math.cos(th) * r; p[i * 3 + 1] = 0.6 + Math.random() * 4; p[i * 3 + 2] = Math.sin(th) * r;
-      sd[i * 3] = Math.random(); sd[i * 3 + 1] = Math.random(); sd[i * 3 + 2] = Math.random();
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(p, 3));
-    g.setAttribute('aSeed', new THREE.BufferAttribute(sd, 3));
+    // fireflies (GPU animated): one material for good, the swarm itself follows the island's size
     W.ffU = { uTime: { value: 0 }, uScale: { value: 600 } };
-    const mat = new THREE.ShaderMaterial({
+    W.ffMat = new THREE.ShaderMaterial({
       uniforms: W.ffU, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
       vertexShader: `attribute vec3 aSeed; uniform float uTime; uniform float uScale; varying float vA; varying vec3 vC;
         void main() {
@@ -503,9 +503,7 @@
       fragmentShader: `varying float vA; varying vec3 vC;
         void main() { float d = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.0, d); gl_FragColor = vec4(vC * (1.5 + vA * 2.5), a * a * (0.3 + vA * 0.7)); }`,
     });
-    const pts = new THREE.Points(g, mat);
-    pts.frustumCulled = false;
-    scene.add(pts);
+    W.ffMat.userData.keep = true;
     const upd = () => {
       const h = G.Render.renderer.getDrawingBufferSize(new THREE.Vector2()).y;
       W.ffU.uScale.value = h / (2 * Math.tan(THREE.MathUtils.degToRad(G.Render.camera.fov) / 2));
@@ -513,17 +511,60 @@
     upd();
     G.Events.on('resize', upd);
   }
+  function buildFireflies(scene) {
+    const FF = Math.round(260 * W.S * W.S), p = new Float32Array(FF * 3), sd = new Float32Array(FF * 3);
+    for (let i = 0; i < FF; i++) {
+      const th = Math.random() * U.TAU, r = Math.sqrt(Math.random()) * (W.ARENA_R + 4);
+      p[i * 3] = Math.cos(th) * r; p[i * 3 + 1] = 0.6 + Math.random() * 4; p[i * 3 + 2] = Math.sin(th) * r;
+      sd[i * 3] = Math.random(); sd[i * 3 + 1] = Math.random(); sd[i * 3 + 2] = Math.random();
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    g.setAttribute('aSeed', new THREE.BufferAttribute(sd, 3));
+    const pts = new THREE.Points(g, W.ffMat);
+    pts.frustumCulled = false;
+    scene.add(pts);
+  }
 
   // ---------- public ----------
   W.build = function (scene) {
+    W.scene = scene;
+    buildStatic(scene);
+    W.setScale(1, true);
+  };
+  function disposeTree(root) {
+    root.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      for (const m of [].concat(o.material || [], o.customDepthMaterial || [])) if (!m.userData.keep) m.dispose();
+      if (o.isInstancedMesh) o.dispose();
+    });
+  }
+  // (Re)builds the island, its props, grass and fireflies for a width scale. The same scale always
+  // builds the same props in the same order, so co-op machines agree on every obstacle index.
+  W.setScale = function (S, force) {
+    S = U.clamp(+S || 1, 1, 2);
+    if (!force && Math.abs(S - W.S) < 0.001) return false;
+    W.S = S;
+    W.ARENA_R = BASE_R * S;
+    if (W.root) { W.scene.remove(W.root); disposeTree(W.root); }
+    W.root = new THREE.Group();
+    W.scene.add(W.root);
+    W.obstacles = [];
+    W.obsU.uObs.value.fill(1);
     N.seed(1337);
+    HF_HALF = Math.ceil(56 * S);
+    HF_RES = Math.round((HF_HALF * 2) / HF_STEP) + 1;
     hf = new Float32Array(HF_RES * HF_RES);
     for (let iz = 0; iz < HF_RES; iz++)
       for (let ix = 0; ix < HF_RES; ix++) hf[iz * HF_RES + ix] = rawHeight(-HF_HALF + ix * HF_STEP, -HF_HALF + iz * HF_STEP);
-    buildIsland(scene);
-    buildProps(scene);
-    buildGrass(scene, G.Render.Q.grass);
-    buildAmbience(scene);
+    buildIsland(W.root);
+    buildProps(W.root);
+    buildGrass(W.root, Math.round(G.Render.Q.grass * Math.min(S * S, 1.8)));
+    buildFireflies(W.root);
+    W.toldBreak = false;
+    W.syncKey = '';
+    if (G.Enemies && G.Enemies.obstaclesChanged) G.Enemies.obstaclesChanged();
+    return true;
   };
 
   W.resolve = function (o, radius) {
@@ -686,7 +727,8 @@
       const f = W.floaters[i];
       f.a += f.sp * dt;
       tmpE.set(f.rot + t * 0.05, f.rot, 0); tmpQ.setFromEuler(tmpE);
-      tmpM.compose(tmpP.set(Math.cos(f.a) * f.r, f.y + Math.sin(t * 0.5 + f.ph) * 1.2, Math.sin(f.a) * f.r), tmpQ, tmpS.set(f.s, f.s, f.s));
+      const fr = f.r + (W.S - 1) * 50; // stay outside a widened island
+      tmpM.compose(tmpP.set(Math.cos(f.a) * fr, f.y + Math.sin(t * 0.5 + f.ph) * 1.2, Math.sin(f.a) * fr), tmpQ, tmpS.set(f.s, f.s, f.s));
       W.floatMesh.setMatrixAt(i, tmpM);
     }
     W.floatMesh.instanceMatrix.needsUpdate = true;

@@ -222,6 +222,10 @@
     seg.innerHTML = Gm.DIFF_KEYS.map((k) => `<button class="seg-b d-${k}${k === dk ? ' on' : ''}" data-k="${k}"${host ? '' : ' disabled'}>${Gm.DIFFS[k].name}</button>`).join('');
     if (host) seg.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { G.Audio.play('ui'); N.setDiff(b.dataset.k); }));
     $('lobby-diff-note').textContent = host ? '방장이 정합니다' : '방장이 고른 난이도';
+    // what a bigger party changes, for the people in the room right now
+    const pa = Gm.PARTY(Math.max(1, list.length)), x = (v) => '×' + (Math.round(v * 100) / 100);
+    $('lobby-party').innerHTML = pa.pc < 2 ? '사람이 늘수록 섬이 넓어지고 적이 강해져요'
+      : `<b>${pa.pc}명</b> · 섬 넓이 ${x(pa.area)} · 적 수 ${x(pa.count)} · 적 체력 ${x(pa.hp)} · 적 공격력 ${x(pa.dmg)} · 보스 체력 ${x(pa.boss)}`;
     $('btn-lobby-start').classList.toggle('hidden', !host);
     $('btn-lobby-start').disabled = N.status !== 'inroom';
     const wait = N.waiting();
@@ -284,8 +288,8 @@
     E['xp-text'].textContent = '레벨 ' + Gm.team.lv + ' · ' + Math.floor(Gm.team.xp) + ' / ' + Gm.team.xpNext;
 
     E['wave-label'].textContent = Gm.waveLabel();
-    const di = Gm.diffInfo();
-    if (E['diff-tag'].textContent !== di.name) { E['diff-tag'].textContent = di.name; E['diff-tag'].style.color = di.css; }
+    const di = Gm.diffInfo(), tag = mp ? di.name + ' · ' + Gm.players() + '인' : di.name;
+    if (E['diff-tag'].textContent !== tag) { E['diff-tag'].textContent = tag; E['diff-tag'].style.color = di.css; }
     E['wave-sub'].textContent = Gm.waveSub();
     E.wpFill.style.width = Gm.waveProgress() * 100 + '%';
     E.score.textContent = U.fmtNum(Gm.score);

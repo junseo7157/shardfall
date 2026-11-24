@@ -334,7 +334,7 @@
     }
   }
 
-  const E = (G.Enemies = { list: [], TYPES, AFFIX, TYPE_KEYS, AFFIX_KEYS, STATE_KEYS, hpScale: 1, grid: new G.Grid(120, 4), nextId: 0 });
+  const E = (G.Enemies = { list: [], TYPES, AFFIX, TYPE_KEYS, AFFIX_KEYS, STATE_KEYS, hpScale: 1, grid: new G.Grid(160, 4), nextId: 0 });
   const rigs = {};
   const pool = [];
   const proxies = new Map();
@@ -406,9 +406,10 @@
   }
 
   // ---------- flow field pathfinding (Dijkstra from every living hero, rebuilt ~5x/sec) ----------
-  const FN = 80, FH = 40, FNN = FN * FN;
+  // one cell per metre, sized to the island (a co-op island is wider)
+  let FN = 80, FH = 40, FNN = FN * FN;
   let ffDist = null, ffBlocked = null, ffT = 0;
-  const hk = new Float32Array(FNN * 8), hv = new Int32Array(FNN * 8);
+  let hk = new Float32Array(FNN * 8), hv = new Int32Array(FNN * 8);
   let hn = 0;
   function hpush(k, v) {
     let i = hn++;
@@ -430,8 +431,12 @@
   }
   const cellOf = (v) => U.clamp(Math.floor(v + FH), 0, FN - 1);
   function ffInit() {
+    const W = G.World, half = Math.ceil(W.ARENA_R + 3);
+    if (half !== FH) {
+      FH = half; FN = half * 2; FNN = FN * FN;
+      hk = new Float32Array(FNN * 8); hv = new Int32Array(FNN * 8);
+    }
     ffDist = new Float32Array(FNN); ffBlocked = new Uint8Array(FNN);
-    const W = G.World;
     for (let iz = 0; iz < FN; iz++) for (let ix = 0; ix < FN; ix++) {
       const x = ix - FH + 0.5, z = iz - FH + 0.5;
       let b = Math.hypot(x, z) > W.ARENA_R - 0.4;
