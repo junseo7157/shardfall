@@ -150,7 +150,14 @@
       G.Heroes.add(it.key, { local: false, drive: 'net', auth: mode === 'host', color: it.color, name: it.name, forge: it.forge, slot: i });
     });
   }
+  Gm.COOP_MIN = 2;
   Gm.start = function (mode = 'solo') {
+    // a co-op run needs at least two people in the room (a host left alone goes back to the lobby)
+    if (mode === 'host' && G.Net.roster.length < Gm.COOP_MIN) {
+      G.UI.toast('같이 하기는 2명부터 시작할 수 있어요', 'warn', 4);
+      if (Gm.state !== 'lobby') Gm.backToLobby();
+      return;
+    }
     clearWorld();
     G.Net.mode = mode;
     Gm.mode = mode;
@@ -302,11 +309,12 @@
     G.Audio.play('gameOver');
     G.UI.setPlaying(false);
   }
+  // co-op: a fallen hero waits for the rest of the team; clearing the stage brings them back
+  // (see waveComplete), and if nobody is left standing the run is lost
   Gm.onHeroDeath = function (h) {
     if (Gm.mode === 'solo') { enterDying(); return; }
-    if (h !== G.Player) G.Net.vis('toast', (h.name || '동료') + '님이 쓰러졌어요', 'warn');
-    else G.UI.toast('쓰러졌어요. 다음 스테이지에서 다시 일어납니다', 'warn', 4);
-    if (!G.Heroes.anyAlive()) { G.Net.setPhase('over'); enterDying(); }
+    if (!G.Heroes.anyAlive()) { G.Net.setPhase('over'); enterDying(); return; }
+    G.Net.vis('toast', (h.name || '동료') + '님이 쓰러졌어요 · 이 스테이지를 깨면 다시 일어나요', 'warn');
   };
   function victory() {
     G.Audio.play('victory');
@@ -428,6 +436,7 @@
     elitesLeft = n >= 3 ? 1 + Math.floor(n / 5) + (pc - 1) : 0;
     G.Enemies.hpScale = (1 + (n - 1) * 0.15) * (n > FINAL_WAVE ? 1 + (n - FINAL_WAVE) * 0.12 : 1) * party.hp * D().k;
     G.World.setAltarActive(false);
+    // fallback: someone who fell during the break between stages comes back as the next one starts
     for (const h of G.Heroes.list) if (!h.alive && Gm.mode === 'host') h.revive(0.5);
     const title = '스테이지 ' + n;
     if (isBoss) G.Net.vis('banner', title, n > FINAL_WAVE ? '각성한 보스가 내려옵니다' : '보스가 내려옵니다', 'boss');
@@ -515,6 +524,12 @@
     G.Net.vis('clearShots');
     G.World.setAltarActive(true);
     G.Save.data.bestWave = Math.max(G.Save.data.bestWave, n);
+    // co-op: the stage is cleared, so whoever fell in it gets back up (by the altar, in time to heal)
+    if (Gm.mode === 'host') {
+      const fallen = G.Heroes.list.filter((h) => !h.alive);
+      for (const h of fallen) h.revive(0.5);
+      if (fallen.length) G.Net.vis('toast', fallen.map((h) => h.name || '동료').join(', ') + '님이 다시 일어났어요', 'good');
+    }
   }
   function remaining() { return Math.max(0, budget - spawned) + G.Enemies.count(); }
   Gm.waveLabel = () => (isBoss ? '보스 · ' : '') + '스테이지 ' + Gm.wave + (Gm.endless ? '' : ' / ' + FINAL_WAVE);

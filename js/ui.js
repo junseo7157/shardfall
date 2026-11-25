@@ -244,10 +244,12 @@
     $('lobby-party').innerHTML = pa.pc < 2 ? '사람이 늘수록 섬이 넓어지고 적이 강해져요'
       : `<b>${pa.pc}명</b> · 섬 넓이 ${x(pa.area)} · 적 수 ${x(pa.count)} · 적 체력 ${x(pa.hp)} · 적 공격력 ${x(pa.dmg)} · 보스 체력 ${x(pa.boss)}`;
     $('btn-lobby-start').classList.toggle('hidden', !host);
-    $('btn-lobby-start').disabled = N.status !== 'inroom';
+    // co-op needs a partner: the host can start once at least two people are in the room
+    $('btn-lobby-start').disabled = N.status !== 'inroom' || list.length < Gm.COOP_MIN;
     const wait = N.waiting();
     if (N.reason) setStatus('lobby-status', N.reason, true);
     else if (!N.connected) setStatus('lobby-status', '연결이 잠시 끊겼어요. 다시 잇는 중...', true);
+    else if (host && list.length < Gm.COOP_MIN) setStatus('lobby-status', '친구를 기다리는 중이에요 · 같이 하기는 2명부터 시작할 수 있어요');
     else if (host) setStatus('lobby-status', list.length + '명 모였어요. 준비되면 시작을 누르세요');
     else setStatus('lobby-status', wait || '방장이 시작하기를 기다리는 중', !!wait && !wait.endsWith('...'));
   };
@@ -540,7 +542,7 @@
     const t = $('go-title');
     t.textContent = o.victory ? '승리' : '패배';
     t.className = o.victory ? 'victory' : 'defeat';
-    $('go-sub').textContent = o.victory ? '15스테이지를 끝까지 버텼습니다' : '스테이지 ' + o.wave + '에서 쓰러졌습니다';
+    $('go-sub').textContent = o.victory ? '15스테이지를 끝까지 버텼습니다' : '스테이지 ' + o.wave + (o.coop ? '에서 모두 쓰러졌습니다' : '에서 쓰러졌습니다');
     const st = o.stats;
     const rows = [['난이도', o.diff ? o.diff.name : '보통'], ['점수', U.fmtNum(o.score)], ['스테이지', o.wave], ['레벨', o.level], ['시간', U.fmtTime(o.time)], ['처치', U.fmtNum(st.kills)],
       ['최대 연속 처치', st.maxCombo], ['엘리트', st.elites], ['보스', st.bosses]];

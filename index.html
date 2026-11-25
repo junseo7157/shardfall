@@ -70,7 +70,7 @@
   <div id="upgrade-list"></div>
   <div id="toasts"></div>
   <div id="banner"><div class="banner-title"></div><div class="banner-sub"></div></div>
-  <div id="spectate" class="hidden">쓰러졌어요 · 다음 스테이지가 시작되면 다시 일어납니다</div>
+  <div id="spectate" class="hidden">쓰러졌어요 · 동료들이 이 스테이지를 깨면 다시 일어납니다</div>
   <div id="pickwait" class="hidden"></div>
   <div id="fps"></div>
 </div>
@@ -191,6 +191,8 @@
         <li>스테이지 사이에는 가운데 제단 위에서 체력이 찹니다.</li>
         <li>5스테이지마다 보스가 나오고, 15스테이지를 넘기면 승리합니다.</li>
         <li>같이 하면 사람 수만큼 섬이 넓어지고 적이 많아지며, 적과 보스도 더 단단하고 아프게 칩니다. 대기실에서 배율을 볼 수 있어요.</li>
+        <li>같이 하기는 2명부터 시작합니다. 경험치와 레벨은 팀이 함께 쌓고, 레벨이 오르거나 누가 상자를 열면 모두 카드를 한 장씩 각자 고릅니다.</li>
+        <li>같이 하다 쓰러지면 남은 동료가 그 스테이지를 깨는 순간 다시 일어납니다. 모두 쓰러지면 실패입니다.</li>
       </ul>
       <button class="btn ghost" id="btn-help-back">돌아가기</button>
     </div>
@@ -294,7 +296,7 @@ try {
     ShaderPass: sp.ShaderPass, OutputPass: op.OutputPass, mergeGeometries: bgu.mergeGeometries,
   };
   const files = ['core', 'render', 'world', 'fx', 'audio', 'vis', 'icons', 'upgrades', 'hero', 'projectiles', 'enemies', 'bosses', 'pickups', 'net', 'ui', 'touch', 'game'];
-  const BUILD = ['localhost', '127.0.0.1'].includes(location.hostname) ? String(Date.now()) : '11';
+  const BUILD = ['localhost', '127.0.0.1'].includes(location.hostname) ? String(Date.now()) : '12';
   for (let i = 0; i < files.length; i++) {
     setStatus('게임 데이터 받는 중 · ' + files[i]);
     await loadScript('js/' + files[i] + '.js?v=' + BUILD);
