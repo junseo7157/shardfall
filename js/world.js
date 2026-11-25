@@ -11,6 +11,34 @@
   W.obstacles = [];
   W.altar = { x: 0, z: 0, r: 4.6 };
 
+  // colours of each look; hell (the hell difficulty) turns the island to ash, obsidian and fire.
+  // Only colours differ, never the random draws, so both looks place every prop in the same spot.
+  const LOOKS = {
+    normal: {
+      grassA: 0x3a7a58, grassB: 0x62a35c, grassC: 0x9aa64e, path: 0x8c6a52, stone: 0x8d8aa6, rock: 0x6d6684, lip: 0x6b4a3c,
+      under: [0x5a3d33, 0x433857, 0x1e1a30], rimRock: [0x6c6584, 0x5d5672], rimMoss: 0x4f8a5a,
+      pillarBase: 0x9a96b0, pillar: 0xaaa6c0, pillarMoss: 0x5c8a5c, pillarCol: 0xa8a4be, fallen: 0xa29eb8, rune: [0xffcf7a, 1.7],
+      crystalBase: 0x4d4766, crystals: [0x4f7fe8, 0xe89a38], crystalCols: [0x7fa8ff, 0xf0b060],
+      boulder: 0x77708e, boulderMoss: 0x5a9a5e, trunk: 0x5b3a2e, blossom: [0xd8679a, 0xb84f9c, 0xf08ab0], pine: [0x2f7a6a, 0x5fb894],
+      altarDisc: 0x9b98b4, altarInner: 0x7c7898, altarPost: 0x9a96b0,
+      grassBase: 0x1f4a35, grassTip: 0x8cc276, flowers: [0xff9a8a, 0x9fbdf5, 0xffe27a],
+      shard: 0xc8dcff, shardGlow: 0x5f8fff, shardLight: 0xa9c4ff, ring: [1, 0.8, 0.45], floaters: 0xffffff, lava: false,
+    },
+    hell: {
+      grassA: 0x2a1410, grassB: 0x3d1a12, grassC: 0x5a2414, path: 0x1a0c0a, stone: 0x3a3238, rock: 0x2a2026, lip: 0x3a160e,
+      under: [0x3a160e, 0x24100e, 0x0e0505], rimRock: [0x2e2428, 0x261d22], rimMoss: 0x6a2414,
+      pillarBase: 0x3a3440, pillar: 0x4a4250, pillarMoss: 0x7a2414, pillarCol: 0x5a4a58, fallen: 0x443c48, rune: [0xff3a10, 2.2],
+      crystalBase: 0x2a1a1e, crystals: [0xd8181e, 0xff5a10], crystalCols: [0xff4040, 0xff8a30],
+      boulder: 0x2c2426, boulderMoss: 0x5a2010, trunk: 0x1e1210, blossom: [0x9a2412, 0x6a140c, 0xd8501a], pine: [0x2a1210, 0x4a1a10],
+      altarDisc: 0x3e3640, altarInner: 0x2a2228, altarPost: 0x3a3440,
+      grassBase: 0x140806, grassTip: 0x5a1e10, flowers: [0xff4a1a, 0xff8a2a, 0xffc040],
+      shard: 0xff9a80, shardGlow: 0xff2a0a, shardLight: 0xff5a2a, ring: [1, 0.35, 0.12], floaters: 0x8a4a44, lava: true,
+    },
+  };
+  W.theme = 'normal';
+  let LK = LOOKS.normal;
+  W.lavaU = { uTime: { value: 0 } };
+
   const HF_STEP = 0.5;
   let HF_HALF = 56, HF_RES = Math.round((HF_HALF * 2) / HF_STEP) + 1;
   let hf = null;
@@ -136,21 +164,27 @@
   // ---------- island ----------
   function buildIsland(scene) {
     const RINGS = Math.round(70 * W.S), SEG = Math.round(200 * Math.sqrt(W.S));
-    const verts = [], cols = [], idx = [];
-    const cGrassA = new THREE.Color(0x3a7a58), cGrassB = new THREE.Color(0x62a35c), cGrassC = new THREE.Color(0x9aa64e);
-    const cPath = new THREE.Color(0x8c6a52), cStone = new THREE.Color(0x8d8aa6), cRock = new THREE.Color(0x6d6684), cLip = new THREE.Color(0x6b4a3c);
+    const verts = [], cols = [], idx = [], lava = LK.lava ? [] : null;
+    const cGrassA = new THREE.Color(LK.grassA), cGrassB = new THREE.Color(LK.grassB), cGrassC = new THREE.Color(LK.grassC);
+    const cPath = new THREE.Color(LK.path), cStone = new THREE.Color(LK.stone), cRock = new THREE.Color(LK.rock), cLip = new THREE.Color(LK.lip);
     const pushV = (x, z, f) => {
       const r = Math.hypot(x, z);
       let h = rawHeight(x, z) - U.smoothstep(0.9, 1, f) * 1.4;
       verts.push(x, h, z);
-      const n1 = N.fbm(x * 0.06, z * 0.06, 3), n2 = N.simplex2(x * 0.3, z * 0.3);
+      const n1 = N.fbm(x * 0.06, z * 0.06, 3), n2 = N.simplex2(x * 0.3, z * 0.3), pm = pathMask(x, z);
       tmpC.copy(cGrassA).lerp(cGrassB, U.clamp(0.5 + n1 * 0.9, 0, 1));
       tmpC.lerp(cGrassC, U.clamp(n2 * 0.6 - 0.1, 0, 0.5));
-      tmpC.lerp(cPath, pathMask(x, z) * 0.85);
+      tmpC.lerp(cPath, pm * 0.85);
       if (r < 6.2) tmpC.lerp(cStone, U.smoothstep(6.2, 5.6, r));
       tmpC.lerp(cRock, U.smoothstep(W.ARENA_R + 1, W.ARENA_R + 6, r) * U.clamp(0.5 + n2, 0.3, 1));
       tmpC.lerp(cLip, U.smoothstep(0.93, 1, f));
       cols.push(tmpC.r, tmpC.g, tmpC.b);
+      // hell: the paths are rivers of cooling magma, with glowing seams wandering off into the ash
+      if (lava) {
+        const seam = U.smoothstep(0.93, 0.99, 1 - Math.abs(N.simplex2(x * 0.11 + 31, z * 0.11 - 17)));
+        const inside = U.smoothstep(6.4, 8.5, r) * (1 - U.smoothstep(W.ARENA_R - 2, W.ARENA_R + 3, r));
+        lava.push(Math.max(U.smoothstep(0.35, 1, pm) * 0.85, seam * 0.5) * inside);
+      }
     };
     pushV(0, 0, 0);
     for (let i = 1; i <= RINGS; i++) {
@@ -173,13 +207,27 @@
     geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
     geo.setIndex(idx);
     geo.computeVertexNormals();
-    const top = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 }));
+    const topMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 });
+    if (lava) {
+      geo.setAttribute('aLava', new THREE.Float32BufferAttribute(lava, 1));
+      topMat.onBeforeCompile = (sh) => {
+        sh.uniforms.uTime = W.lavaU.uTime;
+        sh.vertexShader = 'attribute float aLava; varying float vLava; varying vec2 vLavaP;\n' +
+          sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vLava = aLava; vLavaP = position.xz;');
+        sh.fragmentShader = 'uniform float uTime; varying float vLava; varying vec2 vLavaP;\n' +
+          sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+            float lp = 0.72 + 0.28 * sin(uTime * 1.5 + vLavaP.x * 0.23 + vLavaP.y * 0.19);
+            totalEmissiveRadiance += vec3(1.0, 0.22, 0.03) * vLava * vLava * 1.25 * lp;`);
+      };
+      topMat.customProgramCacheKey = () => 'lava-island';
+    }
+    const top = new THREE.Mesh(geo, topMat);
     top.receiveShadow = true;
     scene.add(top);
 
     // underside (rocky cone)
     const K = 16, S2 = 90, uv = [], uc = [], ui = [];
-    const cTopU = new THREE.Color(0x5a3d33), cMidU = new THREE.Color(0x433857), cLowU = new THREE.Color(0x1e1a30);
+    const cTopU = new THREE.Color(LK.under[0]), cMidU = new THREE.Color(LK.under[1]), cLowU = new THREE.Color(LK.under[2]);
     for (let k = 0; k <= K; k++) {
       const f = k / K;
       for (let j = 0; j < S2; j++) {
@@ -235,7 +283,7 @@
       const s = 1.5 + rnd() * 2.6;
       const x = Math.cos(th) * r, z = Math.sin(th) * r;
       const g = place(rockGeo(1, rnd() * 50), x, rawHeight(x, z) + s * 0.25, z, rnd() * 0.6, rnd() * 6, rnd() * 0.6, s * (0.8 + rnd() * 0.6), s * (0.7 + rnd() * 0.9), s);
-      rocks.push(colorize(g, rnd() < 0.5 ? 0x6c6584 : 0x5d5672, 0.08, 0x4f8a5a));
+      rocks.push(colorize(g, rnd() < 0.5 ? LK.rimRock[0] : LK.rimRock[1], 0.08, LK.rimMoss));
     }
     // pillars ring
     for (let k = 0; k < 8; k++) {
@@ -243,14 +291,14 @@
       const x = Math.cos(th) * 21 * S, z = Math.sin(th) * 21 * S, y = W.heightAt(x, z);
       const broken = k % 3 === 1;
       const H = broken ? 2 + rnd() * 1.5 : 4.5 + rnd() * 2.5;
-      const o = addOb(x, z, 1.35, 'pillar', 0xa8a4be);
-      stone.push(tag(colorize(place(new THREE.BoxGeometry(2.3, 0.7, 2.3), x, y + 0.3, z, 0, th, 0), 0x9a96b0, 0.05, 0x5c8a5c), o));
-      stone.push(tag(colorize(place(new THREE.CylinderGeometry(0.72, 0.82, H, 10), x, y + 0.65 + H / 2, z, 0, rnd(), 0), 0xaaa6c0, 0.05, 0x5c8a5c), o));
-      if (!broken) stone.push(tag(colorize(place(new THREE.BoxGeometry(2.0, 0.55, 2.0), x, y + 0.65 + H + 0.27, z, 0, th, 0), 0x9a96b0, 0.05), o, true));
+      const o = addOb(x, z, 1.35, 'pillar', LK.pillarCol);
+      stone.push(tag(colorize(place(new THREE.BoxGeometry(2.3, 0.7, 2.3), x, y + 0.3, z, 0, th, 0), LK.pillarBase, 0.05, LK.pillarMoss), o));
+      stone.push(tag(colorize(place(new THREE.CylinderGeometry(0.72, 0.82, H, 10), x, y + 0.65 + H / 2, z, 0, rnd(), 0), LK.pillar, 0.05, LK.pillarMoss), o));
+      if (!broken) stone.push(tag(colorize(place(new THREE.BoxGeometry(2.0, 0.55, 2.0), x, y + 0.65 + H + 0.27, z, 0, th, 0), LK.pillarBase, 0.05), o, true));
       else {
         const fx = x + Math.cos(th + 1.2) * 2.4, fz = z + Math.sin(th + 1.2) * 2.4;
-        const of = addOb(fx, fz, 1.1, 'column', 0xa29eb8);
-        stone.push(tag(colorize(place(new THREE.CylinderGeometry(0.72, 0.72, 2.2, 10), fx, W.heightAt(fx, fz) + 0.6, fz, 0, th, Math.PI / 2), 0xa29eb8, 0.05, 0x5c8a5c), of));
+        const of = addOb(fx, fz, 1.1, 'column', LK.fallen);
+        stone.push(tag(colorize(place(new THREE.CylinderGeometry(0.72, 0.72, 2.2, 10), fx, W.heightAt(fx, fz) + 0.6, fz, 0, th, Math.PI / 2), LK.fallen, 0.05, LK.pillarMoss), of));
       }
       runes.push(tag(place(new THREE.TorusGeometry(0.86, 0.06, 6, 28), x, y + 1.7, z, Math.PI / 2, 0, 0), o));
     }
@@ -261,14 +309,14 @@
       if (!canPlace(x, z, 1.7, 3.5) || pathMask(x, z) > 0.2) continue;
       n++;
       const y = W.heightAt(x, z), list = n % 2 ? cyanC : violetC;
-      const o = addOb(x, z, 1.7, 'crystal', n % 2 ? 0x7fa8ff : 0xf0b060);
+      const o = addOb(x, z, 1.7, 'crystal', n % 2 ? LK.crystalCols[0] : LK.crystalCols[1]);
       const cnt = 4 + Math.floor(rnd() * 4);
       for (let i = 0; i < cnt; i++) {
         const a = rnd() * U.TAU, d = i === 0 ? 0 : 0.4 + rnd() * 0.7, h = i === 0 ? 3.2 : 1.2 + rnd() * 1.8;
         const g = new THREE.OctahedronGeometry(1, 0);
         list.push(tag(place(g, x + Math.cos(a) * d, y + h * 0.42, z + Math.sin(a) * d, Math.cos(a) * d * 0.5, rnd() * 3, Math.sin(a) * d * 0.5, 0.42, h, 0.42), o));
       }
-      rocks.push(tag(colorize(place(rockGeo(1, rnd() * 50), x, y, z, 0, rnd() * 6, 0, 1.7, 0.6, 1.7), 0x4d4766, 0.08), o));
+      rocks.push(tag(colorize(place(rockGeo(1, rnd() * 50), x, y, z, 0, rnd() * 6, 0, 1.7, 0.6, 1.7), LK.crystalBase, 0.08), o));
     }
     // boulders
     for (let n = 0, tries = 0, want = Math.round(9 * more); n < want && tries < 400 * more; tries++) {
@@ -276,8 +324,8 @@
       const x = Math.cos(th) * r, z = Math.sin(th) * r, s = 1.1 + rnd() * 1.3;
       if (!canPlace(x, z, s, 3) || pathMask(x, z) > 0.3) continue;
       n++;
-      const o = addOb(x, z, s * 0.95, 'boulder', 0x77708e);
-      rocks.push(tag(colorize(place(rockGeo(1, rnd() * 50), x, W.heightAt(x, z) + s * 0.3, z, rnd() * 0.5, rnd() * 6, rnd() * 0.5, s * 1.1, s, s), 0x77708e, 0.08, 0x5a9a5e), o));
+      const o = addOb(x, z, s * 0.95, 'boulder', LK.boulder);
+      rocks.push(tag(colorize(place(rockGeo(1, rnd() * 50), x, W.heightAt(x, z) + s * 0.3, z, rnd() * 0.5, rnd() * 6, rnd() * 0.5, s * 1.1, s, s), LK.boulder, 0.08, LK.boulderMoss), o));
     }
     // trees
     for (let n = 0, tries = 0, want = Math.round(11 * more); n < want && tries < 500 * more && W.obstacles.length < OBS_MAX - 4; tries++) {
@@ -286,11 +334,11 @@
       if (!canPlace(x, z, 0.8, 3.2) || pathMask(x, z) > 0.2) continue;
       n++;
       const y = W.heightAt(x, z), lean = (rnd() - 0.5) * 0.15, pink = rnd() < 0.6;
-      const o = addOb(x, z, 0.85, 'tree', pink ? 0xd8679a : 0x2f7a6a);
+      const o = addOb(x, z, 0.85, 'tree', pink ? LK.blossom[0] : LK.pine[0]);
       // the trunk is left as a stump; the crown disappears
-      trees.push(tag(colorize(place(new THREE.CylinderGeometry(0.2, 0.42, 3.2, 7), x, y + 1.5, z, lean, 0, lean), 0x5b3a2e, 0.1), o));
+      trees.push(tag(colorize(place(new THREE.CylinderGeometry(0.2, 0.42, 3.2, 7), x, y + 1.5, z, lean, 0, lean), LK.trunk, 0.1), o));
       if (pink) {
-        const cols = [0xd8679a, 0xb84f9c, 0xf08ab0];
+        const cols = LK.blossom;
         for (let i = 0; i < 3; i++) {
           const s = 1.7 - i * 0.3, ox = (rnd() - 0.5) * 0.8, oz = (rnd() - 0.5) * 0.8;
           trees.push(tag(colorize(place(rockGeo(1, rnd() * 50), x + ox, y + 3.5 + i * 0.95, z + oz, rnd(), rnd() * 6, rnd(), s, s * 0.8, s), cols[i], 0.12), o, true));
@@ -298,19 +346,19 @@
       } else {
         for (let i = 0; i < 3; i++) {
           const s = 1.9 - i * 0.45;
-          trees.push(tag(colorize(place(new THREE.ConeGeometry(s, 2.2, 7), x, y + 3.0 + i * 1.15, z, 0, rnd() * 3, 0), i === 2 ? 0x5fb894 : 0x2f7a6a, 0.12), o, true));
+          trees.push(tag(colorize(place(new THREE.ConeGeometry(s, 2.2, 7), x, y + 3.0 + i * 1.15, z, 0, rnd() * 3, 0), i === 2 ? LK.pine[1] : LK.pine[0], 0.12), o, true));
         }
       }
     }
 
     // altar
-    stone.push(colorize(place(new THREE.CylinderGeometry(5.2, 5.7, 0.55, 48), 0, 0.12, 0), 0x9b98b4, 0.03));
-    stone.push(colorize(place(new THREE.CylinderGeometry(4.1, 4.1, 0.58, 48), 0, 0.13, 0), 0x7c7898, 0.02));
+    stone.push(colorize(place(new THREE.CylinderGeometry(5.2, 5.7, 0.55, 48), 0, 0.12, 0), LK.altarDisc, 0.03));
+    stone.push(colorize(place(new THREE.CylinderGeometry(4.1, 4.1, 0.58, 48), 0, 0.13, 0), LK.altarInner, 0.02));
     for (let k = 0; k < 4; k++) {
       const th = Math.PI / 4 + (k * Math.PI) / 2, x = Math.cos(th) * 6.1, z = Math.sin(th) * 6.1;
-      stone.push(colorize(place(new THREE.BoxGeometry(0.7, 2.4, 0.7), x, 1.2, z, 0, th, 0), 0x9a96b0, 0.05, 0x5c8a5c));
+      stone.push(colorize(place(new THREE.BoxGeometry(0.7, 2.4, 0.7), x, 1.2, z, 0, th, 0), LK.altarPost, 0.05, LK.pillarMoss));
       cyanC.push(place(new THREE.OctahedronGeometry(0.42, 0), x, 2.9, z, 0, 0, 0, 1, 1.6, 1));
-      addOb(x, z, 0.6, 'altar', 0x9a96b0, false); // the altar's posts never break
+      addOb(x, z, 0.6, 'altar', LK.altarPost, false); // the altar's posts never break
     }
 
     // meshes
@@ -344,9 +392,9 @@
       scene.add(m);
       W.crystalMats.push(mat);
     };
-    mk(cyanC, 0x4f7fe8);
-    mk(violetC, 0xe89a38);
-    const runeMesh = new THREE.Mesh(mergeTagged(runes.map((g) => colorize(g, 0xffffff, 0))), obsMat(new THREE.MeshBasicMaterial({ color: U.hdr(0xffcf7a, 1.7) })));
+    mk(cyanC, LK.crystals[0]);
+    mk(violetC, LK.crystals[1]);
+    const runeMesh = new THREE.Mesh(mergeTagged(runes.map((g) => colorize(g, 0xffffff, 0))), obsMat(new THREE.MeshBasicMaterial({ color: U.hdr(LK.rune[0], LK.rune[1]) })));
     scene.add(runeMesh);
   }
 
@@ -356,7 +404,7 @@
     const ring = new THREE.Mesh(new THREE.TorusGeometry(4.55, 0.09, 8, 80), W.altarRingMat);
     ring.rotation.x = Math.PI / 2; ring.position.y = 0.45;
     scene.add(ring);
-    const shardMat = new THREE.MeshStandardMaterial({ color: 0xc8dcff, emissive: 0x5f8fff, emissiveIntensity: 1.1, roughness: 0.15, flatShading: true });
+    const shardMat = (W.shardMat = new THREE.MeshStandardMaterial({ color: 0xc8dcff, emissive: 0x5f8fff, emissiveIntensity: 1.1, roughness: 0.15, flatShading: true }));
     W.shard = new THREE.Group();
     const big = new THREE.Mesh(new THREE.OctahedronGeometry(1, 0), shardMat);
     big.scale.set(1.1, 2.6, 1.1); big.castShadow = true;
@@ -378,7 +426,7 @@
   // ---------- grass & flowers ----------
   function buildGrass(scene, count) {
     const segs = 4, pos = [], col = [], nor = [], ind = [];
-    const cb = new THREE.Color(0x1f4a35), ct = new THREE.Color(0x8cc276);
+    const cb = new THREE.Color(LK.grassBase), ct = new THREE.Color(LK.grassTip);
     for (let i = 0; i <= segs; i++) {
       const t = i / segs, w = 0.075 * (1 - t * 0.85);
       tmpC.copy(cb).lerp(ct, t);
@@ -442,7 +490,7 @@
     const fc = Math.floor(count / 50);
     const flowers = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.09, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), fc);
     flowers.frustumCulled = false;
-    const fcols = [U.hdr(0xff9a8a, 1.8), U.hdr(0x9fbdf5, 1.8), U.hdr(0xffe27a, 1.8)];
+    const fcols = LK.flowers.map((c) => U.hdr(c, LK.lava ? 2.4 : 1.8));
     let m2 = 0; guard = 0;
     while (m2 < fc && guard++ < fc * 20) {
       const th = Math.random() * U.TAU, r = 7 + Math.random() * (W.ARENA_R - 6);
@@ -463,6 +511,7 @@
     W.floaters = [];
     const fgeo = colorize(rockGeo(1, 3), 0x5f5878, 0.1, 0x4f8a5a);
     W.floatMesh = new THREE.InstancedMesh(fgeo, rockMat(), FR);
+    W.skyRockMats = [W.floatMesh.material]; // floating rocks and far islands: tinted per look
     W.floatMesh.frustumCulled = false;
     for (let i = 0; i < FR; i++) {
       W.floaters.push({ a: Math.random() * U.TAU, r: 54 + Math.random() * 40, y: -16 + Math.random() * 26, s: 0.7 + Math.random() * 2.6,
@@ -481,21 +530,25 @@
         parts.push(colorize(place(new THREE.ConeGeometry(2.2, 6, 6), Math.cos(a) * d, 4, Math.sin(a) * d), 0x2f6a5a, 0.1));
       }
       const m = new THREE.Mesh(merge(parts), rockMat());
+      W.skyRockMats.push(m.material);
       m.position.set(x, y, z);
       m.rotation.y = Math.random() * 6;
       scene.add(m);
     }
 
     // fireflies (GPU animated): one material for good, the swarm itself follows the island's size
-    W.ffU = { uTime: { value: 0 }, uScale: { value: 600 } };
+    // uHell turns the fireflies into embers that drift up off the burning ground
+    W.ffU = { uTime: { value: 0 }, uScale: { value: 600 }, uHell: G.HellU };
     W.ffMat = new THREE.ShaderMaterial({
       uniforms: W.ffU, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      vertexShader: `attribute vec3 aSeed; uniform float uTime; uniform float uScale; varying float vA; varying vec3 vC;
+      vertexShader: `attribute vec3 aSeed; uniform float uTime; uniform float uScale; uniform float uHell; varying float vA; varying vec3 vC;
         void main() {
           vec3 p = position; float t = uTime * (0.25 + aSeed.x * 0.35);
           p.x += sin(t + aSeed.y * 6.28) * 1.6; p.z += cos(t * 0.8 + aSeed.z * 6.28) * 1.6; p.y += sin(t * 1.3 + aSeed.x * 10.0) * 0.7;
+          p.y += uHell * (mod(uTime * (0.6 + aSeed.x * 0.9) + aSeed.y * 7.0, 7.0) - 1.5);
           vA = 0.5 + 0.5 * sin(uTime * (1.5 + aSeed.z * 2.0) + aSeed.y * 20.0);
           vC = mix(vec3(1.0, 0.85, 0.4), vec3(0.4, 1.0, 0.9), step(0.6, aSeed.z));
+          vC = mix(vC, mix(vec3(1.0, 0.32, 0.06), vec3(1.0, 0.62, 0.16), step(0.6, aSeed.z)), uHell);
           vec4 mv = modelViewMatrix * vec4(p, 1.0);
           gl_PointSize = (0.16 + 0.12 * vA) * uScale / -mv.z;
           gl_Position = projectionMatrix * mv;
@@ -530,7 +583,7 @@
   W.build = function (scene) {
     W.scene = scene;
     buildStatic(scene);
-    W.setScale(1, true);
+    W.setup(1, 'normal', true);
   };
   function disposeTree(root) {
     root.traverse((o) => {
@@ -539,12 +592,19 @@
       if (o.isInstancedMesh) o.dispose();
     });
   }
-  // (Re)builds the island, its props, grass and fireflies for a width scale. The same scale always
-  // builds the same props in the same order, so co-op machines agree on every obstacle index.
-  W.setScale = function (S, force) {
+  // (Re)builds the island, its props, grass and fireflies for a width scale and a look. The same
+  // scale always builds the same props in the same order, so co-op machines agree on every obstacle.
+  W.setup = function (S, theme, force) {
     S = U.clamp(+S || 1, 1, 2);
-    if (!force && Math.abs(S - W.S) < 0.001) return false;
+    theme = LOOKS[theme] ? theme : 'normal';
+    if (!force && Math.abs(S - W.S) < 0.001 && theme === W.theme) return false;
     W.S = S;
+    W.theme = theme;
+    LK = LOOKS[theme];
+    W.shardMat.color.set(LK.shard);
+    W.shardMat.emissive.set(LK.shardGlow);
+    W.shardLight.color.set(LK.shardLight);
+    for (const m of W.skyRockMats) m.color.set(LK.floaters);
     W.ARENA_R = BASE_R * S;
     if (W.root) { W.scene.remove(W.root); disposeTree(W.root); }
     W.root = new THREE.Group();
@@ -566,6 +626,7 @@
     if (G.Enemies && G.Enemies.obstaclesChanged) G.Enemies.obstaclesChanged();
     return true;
   };
+  W.setScale = (S, force) => W.setup(S, W.theme, force);
 
   W.resolve = function (o, radius) {
     let hit = false;
@@ -711,10 +772,11 @@
     W.grassU.uPlayer.value.set(px, 0, pz);
     W.windU.uTime.value = t;
     W.ffU.uTime.value = t;
+    W.lavaU.uTime.value = t;
     const pulse = 1.5 + Math.sin(t * 2.2) * 0.35;
     for (const m of W.crystalMats) m.emissiveIntensity = pulse;
     altarGlow = U.damp(altarGlow, W.altarActive ? 1 : 0, 3, dt);
-    W.altarRingMat.color.setRGB(1, 0.8, 0.45).multiplyScalar(0.6 + altarGlow * (1.8 + Math.sin(t * 5) * 0.8));
+    W.altarRingMat.color.setRGB(LK.ring[0], LK.ring[1], LK.ring[2]).multiplyScalar(0.6 + altarGlow * (1.8 + Math.sin(t * 5) * 0.8));
     W.shardLight.intensity = 16 + altarGlow * 34 + Math.sin(t * 3) * 4;
     W.shard.rotation.y += dt * 0.6;
     W.shard.position.y = 5.4 + Math.sin(t * 1.3) * 0.35;

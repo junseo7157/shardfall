@@ -247,6 +247,12 @@
       this.ring = new THREE.Mesh(HS.ringGeo, this.ringM);
       this.ring.position.y = 0.06;
       g.add(this.ring);
+      // co-op: a glass bubble while this hero chooses a card (the fight doesn't stop for it)
+      this.bubbleM = new THREE.MeshBasicMaterial({ color: U.hdr(this.pal.energy, 1.1), transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false });
+      this.bubble = new THREE.Mesh(HS.bubbleGeo || (HS.bubbleGeo = new THREE.IcosahedronGeometry(1.25, 2)), this.bubbleM);
+      this.bubble.position.y = 1.0;
+      this.bubble.visible = false;
+      g.add(this.bubble);
       g.scale.setScalar(1.22);
       scene.add(g);
       if (this.local) {
@@ -722,6 +728,13 @@
       }
       this.ring.rotation.y += dt * 2;
       this.ringM.opacity = 0.32 + Math.sin(t * 4) * 0.1;
+      const picking = this.alive && G.Game.isPicking(this);
+      this.bubble.visible = picking;
+      if (picking) {
+        this.bubble.rotation.y += dt * 0.8;
+        this.bubble.scale.setScalar(1 + Math.sin(t * 3) * 0.04);
+        this.bubbleM.opacity = 0.18 + Math.sin(t * 5) * 0.05;
+      }
       const hf = this.hurtFlash;
       for (const mt of this.mats) mt.emissive.setRGB(hf * 1.2, hf * 0.15, hf * 0.2);
       g.visible = !(this.invuln > 0 && this.invuln < 0.5 && this.hurtFlash <= 0 && this.dashT <= 0 && Math.floor(t * 18) % 2 === 0);
@@ -758,7 +771,7 @@
       this.blades = []; this.drones = [];
       for (const g of this.geos) g.dispose();
       for (const m of this.mats) m.dispose();
-      this.glowM.dispose(); this.ringM.dispose(); this.bladeMat.dispose(); this.droneMat.dispose();
+      this.glowM.dispose(); this.ringM.dispose(); this.bubbleM.dispose(); this.bladeMat.dispose(); this.droneMat.dispose();
       if (this.lightSlot) { this.lightSlot.light.intensity = 0; this.lightSlot.used = false; this.lightSlot = null; }
     }
   }

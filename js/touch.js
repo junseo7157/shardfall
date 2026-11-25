@@ -46,7 +46,7 @@
         '<span class="tb-cd"></span><b class="tb-num"></b>' +
         (k === 'dash' ? '<span class="tb-pips"></span>' : '') + (k === 'lance' ? '<span class="tb-charge"><i></i></span>' : '') +
         `<em>${NAMES[k]}</em></button>`).join('') + '</div>' +
-      '<button class="tmini tb-pause" aria-label="일시정지"><i></i><i></i></button>' +
+      '<button class="tmini tb-pause" aria-label="일시정지"><i></i><i></i><i></i></button>' +
       `<button class="tmini tb-auto${T.auto ? ' on' : ''}" aria-label="자동 조준">자동<br>조준</button>`;
     document.body.appendChild(root);
     lockEl = root.querySelector('.tlock');
@@ -256,6 +256,9 @@
       }
     }
     if (!want) return;
+    // co-op has no pause, so the corner button there is a menu (three bars) instead of pause (two)
+    const coop = Gm.mode !== 'solo', pb = root.querySelector('.tb-pause');
+    if (pb.classList.contains('menu') !== coop) { pb.classList.toggle('menu', coop); pb.setAttribute('aria-label', coop ? '메뉴' : '일시정지'); }
     const s = P.stats;
     setCd('lance', P.cd.lance, P.charging);
     setCd('q', P.cd.nova);

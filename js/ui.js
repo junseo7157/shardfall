@@ -9,7 +9,7 @@
   let teamKey = '';
   const tags = new Map();
   const cdLast = {}, cdMax = {};
-  const ARM_MS = 700;
+  const ARM_MS = 700, COOP_PICK_S = 20;
   const ARCH = 'M10 330V118C10 52 56 10 115 10s105 42 105 108v212z';
   const LOGO = (id) => `<svg viewBox="0 0 660 136" role="img" aria-label="SHARDFALL">
     <defs>
@@ -141,9 +141,13 @@
     if (name === 'lobby') UI.renderLobby();
     if (name === 'forge') UI.renderForge();
     if (name === 'pause') {
+      // co-op has no pause: the same panel is just a menu over a game that keeps running
       const mp = G.Game.mode !== 'solo';
+      $('pause-title').textContent = mp ? '메뉴' : '일시정지';
+      $('btn-resume').textContent = mp ? '돌아가기' : '계속하기';
       $('btn-quit').textContent = mp ? '방 나가기' : '포기하고 메뉴로';
-      $('pause-note').textContent = mp ? '같이 하는 중에는 게임이 멈추지 않아요' : '';
+      $('pause-note').textContent = mp ? '같이 하기에는 일시정지가 없어요. 메뉴를 보는 동안에도 싸움은 계속됩니다' : '';
+      $('screen-pause').classList.toggle('coop', mp);
     }
   };
   UI.hud = function (on) { E.hud.classList.toggle('hidden', !on); };
@@ -160,7 +164,7 @@
     easy: ['적 체력·공격력 ÷1.7', '처음이거나, 카드 조합을 편하게 시험해 보고 싶을 때'],
     normal: ['기준', '카드 조합을 쌓아 가며 끝까지 가는 기본 아레나'],
     hard: ['적 체력·공격력 ×1.4', '조합이 맞물려야 끝까지 버팁니다'],
-    hell: ['적 체력·공격력 ×2.38', '보스의 한 방이 곧 끝입니다'],
+    hell: ['적 체력·공격력 ×2.38', '섬도 몬스터도 지옥불에 물듭니다. 보스의 한 방이 곧 끝입니다'],
   };
   UI.renderDiff = function () {
     const Gm = G.Game, cur = G.Settings.diff;
@@ -218,9 +222,22 @@
     ul.innerHTML = html.join('');
     ul.querySelectorAll('li:not(.empty) .nm').forEach((el, i) => { el.textContent = list[i].name; });
     const host = N.isHost(), Gm = G.Game, dk = N.roomDiff();
+    // The lobby re-renders on every network update (many times a second). The buttons are made
+    // once and only their state changes here; rebuilding them each time swallowed the host's clicks.
     const seg = $('lobby-diff');
-    seg.innerHTML = Gm.DIFF_KEYS.map((k) => `<button class="seg-b d-${k}${k === dk ? ' on' : ''}" data-k="${k}"${host ? '' : ' disabled'}>${Gm.DIFFS[k].name}</button>`).join('');
-    if (host) seg.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { G.Audio.play('ui'); N.setDiff(b.dataset.k); }));
+    if (!seg.childElementCount) {
+      seg.innerHTML = Gm.DIFF_KEYS.map((k) => `<button class="seg-b d-${k}" data-k="${k}">${Gm.DIFFS[k].name}</button>`).join('');
+      seg.addEventListener('click', (e) => {
+        const b = e.target.closest('.seg-b');
+        if (!b || b.disabled || !G.Net.isHost()) return;
+        G.Audio.play('ui');
+        G.Net.setDiff(b.dataset.k);
+      });
+    }
+    for (const b of seg.children) {
+      b.classList.toggle('on', b.dataset.k === dk);
+      b.disabled = !host;
+    }
     $('lobby-diff-note').textContent = host ? '방장이 정합니다' : '방장이 고른 난이도';
     // what a bigger party changes, for the people in the room right now
     const pa = Gm.PARTY(Math.max(1, list.length)), x = (v) => '×' + (Math.round(v * 100) / 100);
@@ -327,10 +344,15 @@
     updateTags(mp);
     E.spectate.classList.toggle('hidden', !(mp && !P.alive && Gm.state === 'playing'));
     const waiting = mp ? Gm.waitingNames() : [];
-    const showWait = mp && Gm.pickPause && !Gm.picksPending() && waiting.length > 0;
+    const showWait = mp && !Gm.picksPending() && waiting.length > 0;
     E.pickwait.classList.toggle('hidden', !showWait);
-    if (showWait) E.pickwait.textContent = '카드 고르는 중 · ' + waiting.join(', ');
-    E['levelup-wait'].textContent = mp && waiting.length ? '아직 고르는 사람 · ' + waiting.join(', ') : '';
+    if (showWait) E.pickwait.textContent = '카드 고르는 중 (보호막) · ' + waiting.join(', ');
+    // co-op card screen: the fight goes on, so the choice has a clock and the chooser a shield
+    if (mp && UI.current === 'levelup' && UI.cards) {
+      const left = Math.max(0, COOP_PICK_S - (performance.now() - UI.cardsAt) / 1000);
+      E['levelup-wait'].textContent = '게임은 계속됩니다 · 고르는 동안은 보호막 · ' + Math.ceil(left) + '초 뒤 자동 선택';
+      if (left <= 0) UI.pickCard(Math.floor(Math.random() * UI.cards.length));
+    } else E['levelup-wait'].textContent = '';
 
     mmT -= dt;
     if (mmT <= 0) { mmT = 1 / 20; drawMinimap(); }
@@ -457,7 +479,9 @@
   UI.showLevelUp = function (cards, opts = {}) {
     UI.cards = cards;
     UI.cardOpts = opts;
-    UI.armAt = performance.now() + ARM_MS;
+    UI.cardsAt = performance.now();
+    UI.armAt = UI.cardsAt + ARM_MS;
+    $('screen-levelup').classList.toggle('coop', G.Game.mode !== 'solo');
     UI.downIdx = -1;
     $('levelup-title').textContent = opts.title || '레벨 업';
     $('levelup-sub').textContent = opts.sub || '카드 한 장을 고르세요';

@@ -74,11 +74,11 @@
   const FINAL_SHADER = {
     uniforms: {
       tDiffuse: { value: null }, uHurt: { value: 0 }, uTime: { value: 0 }, uSat: { value: 1 },
-      uAber: { value: 0 }, uVig: { value: 1 }, uFlash: { value: 0 },
+      uAber: { value: 0 }, uVig: { value: 1 }, uFlash: { value: 0 }, uGrade: { value: 0 },
     },
     vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: `
-      uniform sampler2D tDiffuse; uniform float uHurt, uTime, uSat, uAber, uVig, uFlash;
+      uniform sampler2D tDiffuse; uniform float uHurt, uTime, uSat, uAber, uVig, uFlash, uGrade;
       varying vec2 vUv;
       float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
       void main() {
@@ -91,6 +91,9 @@
         col.b = texture2D(tDiffuse, vUv - off).b;
         float lum = dot(col, vec3(0.299, 0.587, 0.114));
         col = mix(vec3(lum), col, uSat);
+        // hell grade: warmer reds, thinner blues, deeper blacks
+        vec3 hg = pow(max(col * vec3(1.1, 0.9, 0.8), 0.0), vec3(1.07));
+        col = mix(col, hg, uGrade);
         float vig = smoothstep(0.95, 0.3, d * uVig);
         col *= mix(0.6, 1.0, vig);
         col = mix(col, vec3(0.75, 0.04, 0.1), uHurt * smoothstep(0.2, 0.75, d) * 0.9);
@@ -168,7 +171,7 @@
     sun.shadow.normalBias = 0.03;
     scene.add(sun, sun.target);
     R.sunOffset = new THREE.Vector3(22, 42, 16);
-    const rim = new THREE.DirectionalLight(0x6f8fd6, 0.8);
+    const rim = (R.rim = new THREE.DirectionalLight(0x6f8fd6, 0.8));
     rim.position.set(-30, 18, -26);
     scene.add(rim);
 
@@ -193,26 +196,18 @@
       uTime: { value: 0 },
       uStars: { value: 1 },
     };
-    const skyMat = new THREE.ShaderMaterial({
+    const skyMat = (R.skyMat = new THREE.ShaderMaterial({
       uniforms: R.skyUniforms, vertexShader: SKY_VERT, fragmentShader: SKY_FRAG,
       side: THREE.BackSide, depthWrite: false, fog: false,
-    });
+    }));
     R.sky = new THREE.Mesh(new THREE.SphereGeometry(900, 48, 24), skyMat);
     R.sky.renderOrder = -10;
     R.sky.frustumCulled = false;
     scene.add(R.sky);
 
     // environment lighting from the sky gradient
-    try {
-      const pmrem = new THREE.PMREMGenerator(renderer);
-      const envScene = new THREE.Scene();
-      const envSky = new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), skyMat.clone());
-      envSky.material.uniforms.uStars.value = 0;
-      envScene.add(envSky);
-      scene.environment = pmrem.fromScene(envScene, 0.04).texture;
-      scene.environmentIntensity = 0.55;
-      pmrem.dispose();
-    } catch (e) { console.warn('env failed', e); }
+    R.buildEnv();
+    scene.environmentIntensity = 0.55;
 
     // ---------- cloud sea ----------
     R.cloudUniforms = {
@@ -267,6 +262,63 @@
     R.hurtV = 0; R.flashV = 0; R.aberV = 0; R.satTarget = 1;
 
     addEventListener('resize', R.resize);
+  };
+
+  // reflections and ambient light come from a blurred copy of the current sky
+  R.buildEnv = function () {
+    try {
+      const pmrem = new THREE.PMREMGenerator(R.renderer);
+      const envScene = new THREE.Scene();
+      const mat = R.skyMat.clone();
+      mat.uniforms.uStars.value = 0;
+      const envSky = new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), mat);
+      envScene.add(envSky);
+      const old = R.scene.environment;
+      R.scene.environment = pmrem.fromScene(envScene, 0.04).texture;
+      if (old) old.dispose();
+      envSky.geometry.dispose(); mat.dispose();
+      pmrem.dispose();
+    } catch (e) { console.warn('env failed', e); }
+  };
+
+  // ---------- looks: the normal sunset arena, and hell for the hell difficulty ----------
+  const LOOKS = {
+    normal: {
+      fog: 0x3d4762, fogD: 0.0055, exposure: 1.0, env: 0.55, bloom: 0, grade: 0, vig: 1,
+      hemi: [0xc6d2f0, 0x4a3b2e, 1.0], sun: [0xffd3a8, 2.5], rim: [0x6f8fd6, 0.8],
+      sky: { uTop: 0x0f1a33, uMid: 0x3c5a86, uHorizon: 0xf0ae66, uBottom: 0x2c3550, uSunColor: 0xffc98a }, stars: 1,
+      cloud: { uColA: 0x27334d, uColB: 0x7f93b3, uColC: 0xf4cf9c, uFog: 0xb7a08a }, cloudHot: 1,
+    },
+    // a blood-red dusk over a sea of lava, ash instead of stars, everything lit from below by fire
+    hell: {
+      fog: 0x2a0b09, fogD: 0.0072, exposure: 0.97, env: 0.42, bloom: 0.14, grade: 1, vig: 1.12,
+      hemi: [0x8a5a52, 0x2a0a06, 0.85], sun: [0xff8a5a, 2.1], rim: [0xff3a14, 1.0],
+      sky: { uTop: 0x080203, uMid: 0x3a0906, uHorizon: 0xff4d12, uBottom: 0x1a0404, uSunColor: 0xff5a1a }, stars: 0.12,
+      cloud: { uColA: 0x190403, uColB: 0x7a1606, uColC: 0xffb040, uFog: 0x3a0e08 }, cloudHot: 2.6,
+    },
+  };
+  R.theme = 'normal';
+  R.setTheme = function (name) {
+    const L = LOOKS[name] || LOOKS.normal;
+    if (R.theme === name && R.lookApplied) return;
+    R.theme = name; R.lookApplied = true;
+    R.fogColor.set(L.fog);
+    R.scene.fog.color.copy(R.fogColor);
+    R.scene.fog.density = L.fogD;
+    R.scene.background.copy(R.fogColor);
+    R.renderer.toneMappingExposure = L.exposure;
+    R.hemi.color.set(L.hemi[0]); R.hemi.groundColor.set(L.hemi[1]); R.hemi.intensity = L.hemi[2];
+    R.sun.color.set(L.sun[0]); R.sun.intensity = L.sun[1];
+    R.rim.color.set(L.rim[0]); R.rim.intensity = L.rim[1];
+    for (const k in L.sky) R.skyUniforms[k].value.set(L.sky[k]);
+    R.skyUniforms.uStars.value = L.stars;
+    for (const k in L.cloud) R.cloudUniforms[k].value.set(L.cloud[k]);
+    R.cloudUniforms.uColC.value.multiplyScalar(L.cloudHot); // molten highlights bloom
+    R.bloom.strength = R.Q.bloomStrength + L.bloom;
+    R.post.uGrade.value = L.grade;
+    R.post.uVig.value = L.vig;
+    R.buildEnv();
+    R.scene.environmentIntensity = L.env;
   };
 
   R.resize = function () {

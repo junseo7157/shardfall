@@ -224,6 +224,7 @@
   function hover(e, t, o) { o.py = 0.25 + Math.sin(t * 2.5 + e.phase) * 0.12; }
   function swordSwing(e, t, o) { o.py = 0.25 + Math.sin(t * 2.5 + e.phase) * 0.12; o.ry = e.lunge > 0 ? -2.2 + e.lunge * 3.2 : 0.3; o.rx = -0.3; }
 
+  const HELL_GLOW = new THREE.Color(1.0, 0.3, 0.05);
   class Rig {
     constructor(scene, parts, cap) {
       this.parts = parts.map((p) => {
@@ -233,7 +234,9 @@
         for (let i = 0; i < cap; i++) mesh.setColorAt(i, tmpC.set(0xffffff));
         mesh.count = 0;
         scene.add(mesh);
-        return { ...p, mesh, pv: p.pivot ? new THREE.Vector3(...p.pivot) : null, gc: p.glow ? new THREE.Color(p.glow) : null };
+        // eyes and runes burn hotter in hell: their glow leans toward a deep orange
+        const gc = p.glow ? new THREE.Color(p.glow) : null;
+        return { ...p, mesh, pv: p.pivot ? new THREE.Vector3(...p.pivot) : null, gc, gcH: gc ? gc.clone().lerp(HELL_GLOW, 0.7) : null };
       });
       this.n = 0; this.cap = cap;
     }
@@ -251,7 +254,7 @@
           m = tmpM.multiplyMatrices(base, tmpL);
         }
         p.mesh.setMatrixAt(this.n, m);
-        if (p.gc) tmpC.copy(p.gc).multiplyScalar(p.k * (1 + e.flash * 2)).multiply(tint);
+        if (p.gc) tmpC.copy(G.HellU.value ? p.gcH : p.gc).multiplyScalar(p.k * (1 + e.flash * 2)).multiply(tint);
         else tmpC.copy(tint);
         p.mesh.setColorAt(this.n, tmpC);
       }
@@ -340,7 +343,8 @@
   const proxies = new Map();
 
   E.init = function (scene) {
-    E.bodyMat = U.addRim(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.05, flatShading: true }), 0xffe2c8, 0.5, 2.2);
+    // hell difficulty regrades every body toward charcoal, blood and ember (see U.hellPatch)
+    E.bodyMat = U.hellPatch(U.addRim(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.05, flatShading: true }), 0xffe2c8, 0.5, 2.2), 0.62);
     E.glowMat = new THREE.MeshBasicMaterial({ vertexColors: true });
     const caps = { imp: 160, runner: 160, caster: 80, bomber: 80, brute: 40, splitter: 120, wraith: 60, spider: 90, shield: 40, sniper: 50, healer: 30 };
     for (const k in RIG_DEFS) rigs[k] = new Rig(scene, RIG_DEFS[k](), caps[k]);
@@ -862,6 +866,12 @@
     E.list = Array.from(proxies.values());
     E.rebuildGrid();
     render(t);
+  };
+
+  // the rim light that outlines every monster: warm parchment normally, hellfire on hell
+  E.setTheme = function (name) {
+    const rc = E.bodyMat && E.bodyMat.userData.rimColor;
+    if (rc) rc.set(name === 'hell' ? 0xff4a1a : 0xffe2c8);
   };
 
   E.killAll = function () { for (const e of E.list.slice()) if (e.alive) { e.spawnT = 0; e.hurt(1e9); } };

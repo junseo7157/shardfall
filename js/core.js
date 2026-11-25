@@ -3,6 +3,7 @@
 // ============================================================
 (() => {
   const G = (window.G = window.G || {});
+  G.HellU = { value: 0 }; // 1 while a hell-difficulty run is on (see U.hellPatch)
   const TAU = Math.PI * 2;
   const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
   const B64I = new Int16Array(128);
@@ -118,6 +119,34 @@
            totalEmissiveRadiance += uRimColor * pow(rimF, ${power.toFixed(2)}) * ${strength.toFixed(3)};`);
       };
       mat.customProgramCacheKey = () => 'rim' + rc.getHexString() + strength + power;
+      mat.userData.rimColor = rc; // live: change it to recolour the rim without a recompile
+      mat.needsUpdate = true;
+      return mat;
+    },
+    // Hell difficulty: one shared switch (G.HellU) regrades a vertex-coloured body toward charcoal,
+    // blood red and ember while keeping its light and dark parts; instance tints (elite gold, frozen
+    // blue, hit flash) still apply on top, so they stay readable.
+    hellPatch(mat, strength = 0.6) {
+      const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey;
+      mat.onBeforeCompile = (sh, r) => {
+        if (prev) prev(sh, r);
+        sh.uniforms.uHell = G.HellU;
+        sh.vertexShader = 'uniform float uHell;\n' + sh.vertexShader.replace('#include <color_vertex>', `#include <color_vertex>
+          #ifdef USE_COLOR
+          {
+            float hl = dot(color.rgb, vec3(0.3, 0.59, 0.11));
+            vec3 hc = mix(vec3(0.07, 0.025, 0.022), vec3(0.62, 0.08, 0.05), smoothstep(0.06, 0.5, hl));
+            hc = mix(hc, vec3(1.0, 0.52, 0.18), smoothstep(0.55, 0.95, hl));
+            vec3 hb = mix(color.rgb, hc, uHell * ${strength.toFixed(2)});
+            #ifdef USE_INSTANCING_COLOR
+              vColor.rgb = hb * instanceColor.rgb;
+            #else
+              vColor.rgb = hb;
+            #endif
+          }
+          #endif`);
+      };
+      mat.customProgramCacheKey = () => (prevKey ? prevKey.call(mat) : '') + '|hell' + strength;
       mat.needsUpdate = true;
       return mat;
     },

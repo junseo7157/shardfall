@@ -40,6 +40,17 @@
   Gm.PARTY = PARTY;
   Gm.mapPlayers = 1;
   const mapScale = (pc) => Math.sqrt(PARTY(pc).area);
+  // sky, light and colour grade, the monsters' palette; the island itself comes from World.setup
+  function applyLook(look) {
+    G.HellU.value = look === 'hell' ? 1 : 0;
+    G.Render.setTheme(look);
+    G.Enemies.setTheme(look);
+  }
+  // menus and the lobby always show the ordinary sunset island
+  function plainLook() {
+    applyLook('normal');
+    G.World.setup(1, 'normal');
+  }
   Gm.DIFF_KEYS = ['easy', 'normal', 'hard', 'hell'];
   Gm.diff = 'normal';
   const D = () => DIFFS[Gm.diff] || DIFFS.normal;
@@ -146,9 +157,12 @@
     const dk = mode === 'solo' ? G.Settings.diff : G.Net.roomDiff();
     Gm.diff = DIFFS[dk] ? dk : 'normal';
     setupHeroes(mode);
-    // the island is rebuilt wider for a bigger party (and back to normal for solo)
+    // the island is rebuilt wider for a bigger party (and back to normal for solo), and hell
+    // difficulty dresses the whole arena in hellfire
     Gm.mapPlayers = mode === 'solo' ? 1 : Gm.players();
-    G.World.setScale(mapScale(Gm.mapPlayers));
+    const look = Gm.diff === 'hell' ? 'hell' : 'normal';
+    applyLook(look);
+    G.World.setup(mapScale(Gm.mapPlayers), look);
     for (const h of G.Heroes.list) h.reset();
     G.UI.renderUpgradeList();
     Gm.score = 0; Gm.combo = 0; Gm.comboT = 0; Gm.time = 0; Gm.wave = 0; Gm.endless = false; Gm.menuOpen = false;
@@ -203,6 +217,7 @@
   };
   Gm.toMenu = function () {
     clearWorld();
+    plainLook();
     G.Player.hideBody();
     G.Heroes.clearOthers();
     Gm.state = 'menu';
@@ -219,6 +234,7 @@
   };
   Gm.toLobby = function () {
     clearWorld();
+    plainLook();
     G.Player.hideBody();
     G.Heroes.clearOthers();
     Gm.state = 'lobby';
@@ -588,8 +604,13 @@
   };
   Gm.waitingNames = function () {
     if (Gm.mode !== 'host' && Gm.mode !== 'client') return [];
-    const need = (h) => h.stats.startBonus + Gm.team.pq.length;
-    return G.Heroes.list.filter((h) => h !== G.Player && (h.netPr || 0) < need(h)).map((h) => h.name || '동료');
+    return G.Heroes.list.filter((h) => h !== G.Player && Gm.isPicking(h)).map((h) => h.name || '동료');
+  };
+  // co-op: is this hero still choosing a card? (every machine can tell: picks travel in presence)
+  Gm.isPicking = function (h) {
+    if (Gm.mode === 'solo' || !h) return false;
+    const need = h.stats.startBonus + Gm.team.pq.length;
+    return (h === G.Player ? Gm.picksDone : h.netPr || 0) < need;
   };
 
   // ---------------- main loop ----------------
@@ -670,15 +691,14 @@
       const st = Gm.state, mp = Gm.mode !== 'solo';
       if (st === 'playing' || (mp && st === 'levelup')) {
         if (I.wasPressed('Escape', 'KeyP')) { if (Gm.menuOpen) Gm.resume(); else Gm.pause(); }
-        // card picks: solo pauses the run, co-op lets the host wait for everyone
+        // card picks: solo pauses the run; co-op never stops, and whoever is choosing is shielded
         if (G.UI.current !== 'levelup' && Gm.picksPending() && !Gm.menuOpen) {
           pickDelay -= realDt;
           if (pickDelay <= 0) showPicks();
         }
         if (Gm.mode === 'host') {
-          const need = (h) => h.stats.startBonus + Gm.team.pq.length;
-          const waiting = G.Heroes.list.some((h) => (h === G.Player ? Gm.picksDone : h.netPr || 0) < need(h));
-          if (waiting) { pickWaitT += realDt; Gm.pickPause = pickWaitT < 30; } else { pickWaitT = 0; Gm.pickPause = false; }
+          Gm.pickPause = false;
+          for (const h of G.Heroes.list) if (h.alive && Gm.isPicking(h)) h.invuln = Math.max(h.invuln, 0.25);
         }
         if (Gm.state === 'playing' || mp) {
           if (Gm.mode === 'client') updateClient(dt, realDt); else updateWorld(dt, realDt);

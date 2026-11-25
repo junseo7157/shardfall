@@ -17,19 +17,26 @@
   const Oct = (r) => new THREE.OctahedronGeometry(r, 0);
   const R1 = U.r1, R2 = U.r2;
 
-  // colours per boss: n = normal, a = awakened
+  // colours per boss: n = normal, a = awakened; on the hell difficulty hn = hellfire (obsidian and
+  // lava) and ha = awakened in hell (violet soul-fire, so an awakened boss still stands apart)
   const PAL = [
     {
       n: { aura: 0xff8a3a, glow: 0xff7a2a, glow2: 0xff2a2a, ring: 0xffa25a, rock: 0, tint: 0xffffff },
       a: { aura: 0x5fa8ff, glow: 0x6fb8ff, glow2: 0xc8e8ff, ring: 0x7fc4ff, rock: 0x6fb0ff, tint: 0xa8bce0 },
+      hn: { aura: 0xff3a10, glow: 0xff4a12, glow2: 0xffe070, ring: 0xff5a1a, rock: 0xff4a14, tint: 0x8a6a66 },
+      ha: { aura: 0xb040ff, glow: 0xc060ff, glow2: 0xffffff, ring: 0xc070ff, rock: 0xa040ff, tint: 0x6e6088 },
     },
     {
       n: { aura: 0xff5a6e, core: 0xff5a6e, core2: 0xff2a4a, halo: 0xffc35a, wing: 0x24357a, wingE: 0x3f63e0, b1: 0xff6a7a, b2: 0xffb04a, laser: 0xff5a6e, zone: 0xff3a5a, tint: 0xffffff },
       a: { aura: 0x3fe0a0, core: 0x3fe0a0, core2: 0xb8ffe0, halo: 0xd8ffe8, wing: 0x0f4a3a, wingE: 0x2fd090, b1: 0x5ff0b0, b2: 0xc8ff6a, laser: 0x4ff0b0, zone: 0x3fe0a0, tint: 0xb0e0c8 },
+      hn: { aura: 0xff2a14, core: 0xff3a12, core2: 0xffd060, halo: 0xff6a14, wing: 0x1e0606, wingE: 0xff3a10, b1: 0xff5a2a, b2: 0xffa020, laser: 0xff2a10, zone: 0xff2a14, tint: 0x8a6a68 },
+      ha: { aura: 0xb040ff, core: 0xc060ff, core2: 0xffffff, halo: 0xe0a0ff, wing: 0x140620, wingE: 0x9a3aff, b1: 0xc070ff, b2: 0xff70d0, laser: 0xb050ff, zone: 0xa040ff, tint: 0x6e6088 },
     },
     {
       n: { aura: 0xff6a1a, glow: 0xff8a2a, glow2: 0xffd04a, fire: 0xff7a2a, zone: 0xff5a1a, trail: 0xff8a1a, rock: 0, breath: [3, 1.15, 0.3], tint: 0xffffff },
       a: { aura: 0x7fd8ff, glow: 0x9fe8ff, glow2: 0xffffff, fire: 0x8fe0ff, zone: 0x5fc8ff, trail: 0x6fd0ff, rock: 0x8fd8ff, breath: [1.2, 2.6, 3.2], tint: 0x8fa6d8 },
+      hn: { aura: 0xff2a0a, glow: 0xff3a0a, glow2: 0xfff07a, fire: 0xff4a10, zone: 0xff2a0a, trail: 0xff4a10, rock: 0xff3a10, breath: [3.6, 0.6, 0.1], tint: 0x6e4a46 },
+      ha: { aura: 0xa040ff, glow: 0xb050ff, glow2: 0xffffff, fire: 0xc060ff, zone: 0x9a30ff, trail: 0xb040ff, rock: 0xa040ff, breath: [2.2, 0.8, 3.4], tint: 0x6a5a88 },
     },
   ];
 
@@ -51,7 +58,7 @@
     // o: armor, dm (attack damage), cd (time between attacks) from DEFS
     constructor(kind, name, sub, hp, puppet, aw, o = {}) {
       this.kind = kind; this.aw = aw | 0; this.puppet = !!puppet;
-      this.pal = PAL[kind][this.aw ? 'a' : 'n'];
+      this.pal = PAL[kind][(G.World.theme === 'hell' ? 'h' : '') + (this.aw ? 'a' : 'n')];
       this.color = this.pal.aura;
       this.name = this.aw ? '각성한 ' + name : name;
       this.sub = this.aw ? '모든 능력이 크게 올랐습니다 · ' + sub : sub;
@@ -66,7 +73,7 @@
       this.nx = null; this.nz = 0; this.ny = 0; this.nf = 0; this.flags = 0; this.extra = 0;
       this.group = new THREE.Group();
       scene.add(this.group);
-      this.bodyMat = U.addRim(new THREE.MeshStandardMaterial({ vertexColors: true, color: this.pal.tint, roughness: 0.55, metalness: 0.1, flatShading: true, emissive: 0x000000 }), this.color, 0.55, 2.2);
+      this.bodyMat = U.hellPatch(U.addRim(new THREE.MeshStandardMaterial({ vertexColors: true, color: this.pal.tint, roughness: 0.55, metalness: 0.1, flatShading: true, emissive: 0x000000 }), this.color, 0.55, 2.2), 0.45);
       this.targets = [];
       this.lastAtk = '';
       this.tg = null; this.tgT = 0;
