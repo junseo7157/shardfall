@@ -76,7 +76,7 @@
     PR.player.push({
       x: o.x, y: o.y, z: o.z, vx: Math.cos(o.angle) * o.speed, vz: Math.sin(o.angle) * o.speed, speed: o.speed,
       life: o.life, dmg: o.dmg, size: o.size || 1, pierce: o.pierce || 0, ricochet: o.ricochet || 0, homing: o.homing || 0,
-      color: o.color || 0x9fd0ff, source: o.source || 'bolt', procs: !!o.procs, by: o.by || G.Player, cos: !!o.cos,
+      color: o.color || 0x9fd0ff, source: o.source || 'bolt', procs: !!o.procs, by: o.by || G.Player, cos: !!o.cos, knock: o.knock || 2.2,
       hit: new Set(), target: null, retarget: 0,
     });
   };
@@ -123,7 +123,7 @@
         b.hit.add(hitT);
         // a piercing shot can't run down the wyrm's whole body: one hit per boss
         if (hitT.boss) for (const q of hitT.boss.targets) b.hit.add(q);
-        if (!b.cos) C.damage(hitT, b.dmg, { kx: b.vx / b.speed, kz: b.vz / b.speed, knock: 2.2, source: b.source, procs: b.procs, by: b.by });
+        if (!b.cos) C.damage(hitT, b.dmg, { kx: b.vx / b.speed, kz: b.vz / b.speed, knock: b.knock, source: b.source, procs: b.procs, by: b.by });
         G.FX.spark(b.x, b.y, b.z, b.color, 4, 6);
         if (b.pierce > 0) b.pierce--;
         else if (b.ricochet > 0) {

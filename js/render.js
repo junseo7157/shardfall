@@ -290,9 +290,10 @@
       cloud: { uColA: 0x27334d, uColB: 0x7f93b3, uColC: 0xf4cf9c, uFog: 0xb7a08a }, cloudHot: 1,
     },
     // a blood-red dusk over a sea of lava, ash instead of stars, everything lit from below by fire
+    // (bright enough that the ground, props and enemies all read; the mood comes from colour, not darkness)
     hell: {
-      fog: 0x2a0b09, fogD: 0.0072, exposure: 0.97, env: 0.42, bloom: 0.14, grade: 1, vig: 1.12,
-      hemi: [0x8a5a52, 0x2a0a06, 0.85], sun: [0xff8a5a, 2.1], rim: [0xff3a14, 1.0],
+      fog: 0x32110c, fogD: 0.0058, exposure: 1.1, env: 0.62, bloom: 0.14, grade: 0.85, vig: 0.98,
+      hemi: [0xb88a80, 0x40160c, 1.3], sun: [0xffa678, 2.75], rim: [0xff4a1e, 1.25],
       sky: { uTop: 0x080203, uMid: 0x3a0906, uHorizon: 0xff4d12, uBottom: 0x1a0404, uSunColor: 0xff5a1a }, stars: 0.12,
       cloud: { uColA: 0x190403, uColB: 0x7a1606, uColC: 0xffb040, uFog: 0x3a0e08 }, cloudHot: 2.6,
     },

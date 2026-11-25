@@ -62,6 +62,16 @@
     D('storm', '폭풍의 눈', 'storm', 'legendary', 1, () => '1.5초마다 주변 적 3명에게 <b>벼락</b>', (s) => { s.storm = 1; }),
     D('avatar', '파편 갑주', 'gem', 'legendary', 1, () => '궁극기 <b>+2초</b>, 궁극기 동안 <b>무적</b>', (s) => { s.avatar = 1; }),
   ];
+  // basic-attack boosters (attack speed, bolt speed, more bolts, echoes) come up far less often than
+  // the other cards of their tier
+  const RARE_PICK = { rapid: 0.3, velocity: 0.3, multishot: 0.3, echo: 0.4 };
+  for (const d of defs) d.w = RARE_PICK[d.id] || 1;
+  // skill cards follow the hero's character: the shard mage keeps these names, others get their own skill's
+  const SKILL_ALT = {
+    lance: { name: (k) => k.s1 + ' 연마', desc: (k) => `${k.s1} 위력 <b>+45%</b>, 크기 <b>+20%</b>` },
+    glacial: { name: (k) => k.s2 + ' 숙련', desc: (k) => `${k.s2} 대기시간 <b>-15%</b>, 효과 시간 <b>+0.5초</b>` },
+    meteor: { name: (k) => k.s3 + ' 강화', desc: (k) => `${k.s3} 위력 <b>+40%</b>, 범위 <b>+15%</b>` },
+  };
   // offered only when nothing else is left
   const FALLBACK = [
     D('_heal', '붕대', 'cross', 'common', 99, () => '체력 <b>40</b> 회복, 최대 체력 <b>+5</b>', (s, l, h) => { s.maxHp += 5; if (h.auth) h.heal(40); }),
@@ -75,6 +85,9 @@
   ALL.forEach((d, i) => { d.code = CODES[i]; UP.byId[d.id] = d; UP.byCode[d.code] = d; });
 
   UP.level = (hero, id) => (hero.up.levels[id] || 0);
+  const altFor = (d, h) => { const a = SKILL_ALT[d.id], c = h && h.cls; return a && c && c.id !== 'shard' ? { a, k: c.names } : null; };
+  UP.nameOf = (d, h) => { const x = altFor(d, h); return x ? x.a.name(x.k) : d.name; };
+  UP.descOf = (d, lv, h) => { const x = altFor(d, h); return x ? x.a.desc(x.k) : d.desc(lv, h); };
 
   // tier weights for this hero and this draw (forge luck lifts the upper tiers, chests skip the lower ones)
   UP.tierWeights = function (hero, opts = {}) {
@@ -103,7 +116,7 @@
       // a tier with nothing left to give drops out and the others share its chance
       const tiers = ORDER.filter((r) => tw[r] > 0 && pool.some((d) => d.rarity === r));
       const r = U.weightedPick(tiers, (t) => tw[t]);
-      const d = U.weightedPick(pool.filter((c) => c.rarity === r), (c) => (UP.level(hero, c.id) > 0 ? 1.15 : 1));
+      const d = U.weightedPick(pool.filter((c) => c.rarity === r), (c) => c.w * (UP.level(hero, c.id) > 0 ? 1.15 : 1));
       out.push(d);
       pool.splice(pool.indexOf(d), 1);
     }

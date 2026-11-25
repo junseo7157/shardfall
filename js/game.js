@@ -130,24 +130,30 @@
     G.Enemies.clear(); G.Bosses.clear(); G.Proj.clear(); G.Pickups.clear(); G.FX.clear(); G.Vis.clear();
     G.UI.clearTags();
     G.Heroes.zones.length = 0;
+    G.Classes.clear();
     G.UI.bossBar(false);
     G.World.setAltarActive(false);
     G.World.resetObstacles();
   }
+  // solo is always the shard mage (soloClass exists for testing other characters alone)
+  Gm.soloClass = 'shard';
   function setupHeroes(mode) {
     G.Heroes.clearOthers();
     if (mode === 'solo') {
-      if (G.Player.key !== 'me' || !G.Player.auth) { G.Heroes.remove(G.Player); G.Player = G.Heroes.add('me', { local: true, auth: true, color: G.Settings.color, slot: 0 }); }
-      else { G.Player.forge = G.Upgrades.forgeCode(); }
+      if (G.Player.key !== 'me' || !G.Player.auth || G.Player.cls.id !== Gm.soloClass) {
+        G.Heroes.remove(G.Player);
+        G.Player = G.Heroes.add('me', { local: true, auth: true, color: G.Settings.color, slot: 0, cls: Gm.soloClass });
+      } else { G.Player.forge = G.Upgrades.forgeCode(); }
       return;
     }
+    // co-op: everyone plays the character the lobby gave them (no two alike)
     const list = G.Net.lobbyList();
     const meIdx = Math.max(0, list.findIndex((it) => it.me));
     G.Heroes.remove(G.Player);
-    G.Player = G.Heroes.add(G.Net.me, { local: true, auth: mode === 'host', color: G.Net.color, name: G.Net.name, slot: meIdx });
+    G.Player = G.Heroes.add(G.Net.me, { local: true, auth: mode === 'host', color: G.Net.color, name: G.Net.name, slot: meIdx, cls: list[meIdx] && list[meIdx].cls });
     list.forEach((it, i) => {
       if (it.me) return;
-      G.Heroes.add(it.key, { local: false, drive: 'net', auth: mode === 'host', color: it.color, name: it.name, forge: it.forge, slot: i });
+      G.Heroes.add(it.key, { local: false, drive: 'net', auth: mode === 'host', color: it.color, name: it.name, forge: it.forge, slot: i, cls: it.cls });
     });
   }
   Gm.COOP_MIN = 2;
@@ -164,6 +170,8 @@
     const dk = mode === 'solo' ? G.Settings.diff : G.Net.roomDiff();
     Gm.diff = DIFFS[dk] ? dk : 'normal';
     setupHeroes(mode);
+    G.UI.setHero(G.Player);
+    G.Touch.setHero(G.Player);
     // the island is rebuilt wider for a bigger party (and back to normal for solo), and hell
     // difficulty dresses the whole arena in hellfire
     Gm.mapPlayers = mode === 'solo' ? 1 : Gm.players();
@@ -396,7 +404,7 @@
     const list = G.Net.lobbyList();
     list.forEach((it, i) => {
       if (it.me || G.Heroes.get(it.key)) return;
-      G.Heroes.add(it.key, { local: false, drive: 'net', auth: false, color: it.color, name: it.name, forge: it.forge, slot: i });
+      G.Heroes.add(it.key, { local: false, drive: 'net', auth: false, color: it.color, name: it.name, forge: it.forge, slot: i, cls: it.cls });
     });
     for (const h of G.Heroes.list.slice()) if (h !== G.Player && !list.some((it) => it.key === h.key)) G.Heroes.remove(h);
     if (!Array.isArray(w.h)) return;
@@ -413,7 +421,7 @@
       h.maxHp = Math.max(1, n(a[1], 100, 1, 1e6));
       const before = h.ult;
       h.ult = n(a[3], 0, 0, 100);
-      if (h === G.Player && before < 100 && h.ult >= 100) { G.UI.toast('파편 폭풍 준비됨 · R', 'gold'); G.Audio.play('chest'); }
+      if (h === G.Player && before < 100 && h.ult >= 100) { G.UI.toast(h.cls.ult.name + ' 준비됨 · R', 'gold'); G.Audio.play('chest'); }
       h.ultT = n(a[4], 0, 0, 20);
       if (rv !== h.rv) {
         if (h === G.Player && alive) { h.revive(0.5); G.UI.toast('다시 일어났어요', 'good'); }
@@ -571,6 +579,7 @@
       if (h.stats.lifestealKill > 0 && Math.random() < h.stats.lifestealKill) h.heal(3);
     }
     if (Math.random() < 0.004) G.Pickups.dropMagnet(e.x, e.z);
+    G.Classes.onKill(e);
   };
   Gm.onBossKilled = function (b) {
     Gm.stats.bosses++;
@@ -682,9 +691,9 @@
     G.Render.adapt(now);
   }
   // co-op keeps running when this tab is hidden (requestAnimationFrame stops there), so a host
-  // switching tabs does not freeze everyone else's game
+  // switching tabs (say, to send the room code) does not freeze the lobby or everyone else's game
   setInterval(() => {
-    if (!document.hidden || Gm.mode === 'solo' || !G.Net.inRoom()) return;
+    if (!document.hidden || !G.Net.inRoom()) return;
     const now = performance.now();
     const realDt = Math.min(0.05, Math.max(0.0001, (now - last) / 1000));
     last = now;

@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700;800;900&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=7">
+<link rel="stylesheet" href="css/style.css?v=8">
 <script type="importmap">
 {
   "imports": {
@@ -99,7 +99,7 @@
         <button class="mi" id="btn-settings">설정</button>
       </nav>
       <p class="menu-stats">최고 점수 <b id="menu-best">0</b> · 최고 스테이지 <b id="menu-wave">0</b> · 영혼 파편 <b id="menu-shards">0</b></p>
-      <p class="menu-foot"><span class="pc-only">WASD 이동 · 마우스 조준 · 좌클릭 공격 · Space/Shift 질주 · Q E R 스킬</span><span class="touch-only">왼쪽 엄지로 이동 · 오른쪽을 끌어서 조준 · 손을 떼면 자동 조준</span></p>
+      <p class="menu-foot"><span class="pc-only">WASD 이동 · 마우스 조준 · 좌클릭 공격 · Space/Shift 질주 · Q E R 스킬</span><span class="touch-only">왼쪽 엄지로 이동 · 오른쪽을 끌어서 조준하고 쏘기 · 스킬 버튼은 끌어서 방향과 위치 정하기</span></p>
     </div>
   </div>
 
@@ -131,13 +131,16 @@
   </div>
 
   <div id="screen-lobby" class="screen dim">
-    <div class="panel narrow">
+    <div class="panel wide lobby-panel">
       <h2>대기실</h2>
       <div class="room-code"><span>방 코드</span><b id="lobby-code">-----</b><button class="btn small" id="btn-copy-code">코드 복사</button></div>
       <p class="lead small" id="lobby-help">친구가 들어오려면 claude.ai에서 이 게임 페이지의 <b>공유</b>로 친구를 초대해야 해요. 그다음 지금 페이지 링크를 보내거나 방 코드를 알려 주세요.</p>
       <div class="lobby-diff"><span>난이도</span><div id="lobby-diff" class="seg"></div><em id="lobby-diff-note"></em></div>
       <p id="lobby-party" class="lobby-party"></p>
       <ul id="lobby-roster" class="roster"></ul>
+      <div class="cls-head"><span>캐릭터</span><em>한 사람에 한 캐릭터 · 다른 사람이 고른 캐릭터는 고를 수 없어요</em></div>
+      <div id="lobby-classes" class="cls-grid"></div>
+      <div id="lobby-cls-info" class="cls-info"></div>
       <p id="lobby-status" class="status"></p>
       <div class="row-buttons">
         <button class="btn primary" id="btn-lobby-start">시작</button>
@@ -160,13 +163,12 @@
       <h2>조작법</h2>
       <div class="help-grid touch-only">
         <div><kbd>왼쪽 엄지</kbd><span>닿은 자리에 생기는 막대로 이동. 살짝 밀면 걷고 끝까지 밀면 달림</span></div>
-        <div><kbd>오른쪽 끌기</kbd><span>끄는 방향으로 조준하며 연사</span></div>
-        <div><kbd>자동 조준</kbd><span>오른쪽에서 손을 떼고 있으면 가까운 적을 알아서 쏨. 왼쪽 위 버튼으로 끄고 켬</span></div>
-        <div><kbd>파편 창</kbd><span>누르고 있으면 모이고 떼면 발사. 버튼을 끌면 그 방향으로 쏨</span></div>
+        <div><kbd>오른쪽 끌기</kbd><span>끄는 방향으로 조준하며 연사. 손을 떼면 멈춤</span></div>
+        <div><kbd>1번 스킬</kbd><span>(파편 창 등) 누르고 있으면 모이고, 버튼을 끈 방향으로 떼는 순간 발사</span></div>
         <div><kbd>질주</kbd><span>움직이는 방향으로 돌진. 질주하는 동안은 맞지 않음</span></div>
-        <div><kbd>서리 노바</kbd><span>주변 적을 얼리고 밀어냄</span></div>
-        <div><kbd>운석</kbd><span>조준한 자리(자동 조준이면 그 적)에 떨어져 불바다를 남김</span></div>
-        <div><kbd>파편 폭풍</kbd><span>적을 쓰러뜨려 모으는 궁극기. 가득 차면 버튼이 빛남</span></div>
+        <div><kbd>2번 스킬</kbd><span>(서리 노바 등) 누르면 바로 시전</span></div>
+        <div><kbd>3번 스킬</kbd><span>(운석 등) 버튼을 끌면 바닥에 떨어질 자리가 보이고, 손을 떼면 그곳에 시전. 끌지 않고 떼면 취소</span></div>
+        <div><kbd>궁극기</kbd><span>적을 쓰러뜨려 모으는 궁극기. 가득 차면 버튼이 빛남</span></div>
       </div>
       <div class="help-grid pc-only">
         <div><kbd>W A S D</kbd><span>이동</span></div>
@@ -192,6 +194,7 @@
         <li>5스테이지마다 보스가 나오고, 15스테이지를 넘기면 승리합니다.</li>
         <li>같이 하면 사람 수만큼 섬이 넓어지고 적이 많아지며, 적과 보스도 더 단단하고 아프게 칩니다. 대기실에서 배율을 볼 수 있어요.</li>
         <li>같이 하기는 2명부터 시작합니다. 경험치와 레벨은 팀이 함께 쌓고, 레벨이 오르거나 누가 상자를 열면 모두 카드를 한 장씩 각자 고릅니다.</li>
+        <li>같이 하기에서는 대기실에서 캐릭터를 고릅니다(파편술사·수호기사·매사냥꾼·화염술사·빛의 사제, 겹치지 않게). 캐릭터마다 스킬 3개와 궁극기, 고유 특성이 다릅니다. 위의 키 설명은 파편술사 기준입니다.</li>
         <li>같이 하다 쓰러지면 남은 동료가 그 스테이지를 깨는 순간 다시 일어납니다. 모두 쓰러지면 실패입니다.</li>
       </ul>
       <button class="btn ghost" id="btn-help-back">돌아가기</button>
@@ -295,8 +298,8 @@ try {
     EffectComposer: ec.EffectComposer, RenderPass: rp.RenderPass, UnrealBloomPass: ub.UnrealBloomPass,
     ShaderPass: sp.ShaderPass, OutputPass: op.OutputPass, mergeGeometries: bgu.mergeGeometries,
   };
-  const files = ['core', 'render', 'world', 'fx', 'audio', 'vis', 'icons', 'upgrades', 'hero', 'projectiles', 'enemies', 'bosses', 'pickups', 'net', 'ui', 'touch', 'game'];
-  const BUILD = ['localhost', '127.0.0.1'].includes(location.hostname) ? String(Date.now()) : '12';
+  const files = ['core', 'render', 'world', 'fx', 'audio', 'vis', 'icons', 'upgrades', 'hero', 'classes', 'projectiles', 'enemies', 'bosses', 'pickups', 'net', 'ui', 'touch', 'game'];
+  const BUILD = ['localhost', '127.0.0.1'].includes(location.hostname) ? String(Date.now()) : '13';
   for (let i = 0; i < files.length; i++) {
     setStatus('게임 데이터 받는 중 · ' + files[i]);
     await loadScript('js/' + files[i] + '.js?v=' + BUILD);

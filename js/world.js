@@ -24,13 +24,15 @@
       grassBase: 0x1f4a35, grassTip: 0x8cc276, flowers: [0xff9a8a, 0x9fbdf5, 0xffe27a],
       shard: 0xc8dcff, shardGlow: 0x5f8fff, shardLight: 0xa9c4ff, ring: [1, 0.8, 0.45], floaters: 0xffffff, lava: false,
     },
+    // Props are ash-dusted basalt, clearly lighter and cooler than the scorched ground, so cover reads at a
+    // glance; seen from above it is their tops (the 'moss' colour) that show most, so those carry the ash.
     hell: {
-      grassA: 0x2a1410, grassB: 0x3d1a12, grassC: 0x5a2414, path: 0x1a0c0a, stone: 0x3a3238, rock: 0x2a2026, lip: 0x3a160e,
-      under: [0x3a160e, 0x24100e, 0x0e0505], rimRock: [0x2e2428, 0x261d22], rimMoss: 0x6a2414,
-      pillarBase: 0x3a3440, pillar: 0x4a4250, pillarMoss: 0x7a2414, pillarCol: 0x5a4a58, fallen: 0x443c48, rune: [0xff3a10, 2.2],
-      crystalBase: 0x2a1a1e, crystals: [0xd8181e, 0xff5a10], crystalCols: [0xff4040, 0xff8a30],
-      boulder: 0x2c2426, boulderMoss: 0x5a2010, trunk: 0x1e1210, blossom: [0x9a2412, 0x6a140c, 0xd8501a], pine: [0x2a1210, 0x4a1a10],
-      altarDisc: 0x3e3640, altarInner: 0x2a2228, altarPost: 0x3a3440,
+      grassA: 0x321812, grassB: 0x451f14, grassC: 0x5e2a17, path: 0x1a0c0a, stone: 0x4a4450, rock: 0x3a3238, lip: 0x3a160e,
+      under: [0x3a160e, 0x24100e, 0x0e0505], rimRock: [0x524c5a, 0x48424f], rimMoss: 0x7e7a8a,
+      pillarBase: 0x605c70, pillar: 0x6e6a7e, pillarMoss: 0x9692a2, pillarCol: 0x7c7890, fallen: 0x666276, rune: [0xff3a10, 2.2],
+      crystalBase: 0x504852, crystals: [0xd8181e, 0xff5a10], crystalCols: [0xff4040, 0xff8a30],
+      boulder: 0x5c5866, boulderMoss: 0x9a96a6, trunk: 0x4a2c24, blossom: [0xc0321a, 0x922410, 0xf0642a], pine: [0x5a2618, 0x80341c],
+      altarDisc: 0x5e5a6c, altarInner: 0x423e4c, altarPost: 0x666276,
       grassBase: 0x140806, grassTip: 0x5a1e10, flowers: [0xff4a1a, 0xff8a2a, 0xffc040],
       shard: 0xff9a80, shardGlow: 0xff2a0a, shardLight: 0xff5a2a, ring: [1, 0.35, 0.12], floaters: 0x8a4a44, lava: true,
     },
@@ -139,7 +141,24 @@
     sh.uniforms.uObs = W.obsU.uObs;
     sh.vertexShader = OBS_HEAD + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + OBS_CODE);
   }
+  // Hell only (G.HellU): props catch the magma's light, an ember rim along their silhouette and a
+  // glow where they meet the ground, so every piece of cover stands out from the dark floor.
+  // Runs after obsPatch (it reads the prop's base point) and only on lit materials, never on shadows.
+  function hellEdge(sh) {
+    sh.uniforms.uHell = G.HellU;
+    sh.vertexShader = 'varying float vObH;\n' + sh.vertexShader.replace('#include <project_vertex>',
+      'vObH = transformed.y - (aOb.x >= 0.0 ? aObC.y : 0.0);\n#include <project_vertex>');
+    sh.fragmentShader = 'uniform float uHell; varying float vObH;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+       if (uHell > 0.5) {
+         float hRim = 1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
+         float hLow = 1.0 - smoothstep(0.0, 1.6, vObH);
+         totalEmissiveRadiance += vec3(1.0, 0.34, 0.09) * (pow(hRim, 2.4) * 0.55 + hLow * hLow * 0.32);
+       }`);
+  }
+  const obsHellPatch = (sh) => { obsPatch(sh); hellEdge(sh); };
   const obsMat = (m) => { m.onBeforeCompile = obsPatch; return m; };
+  const obsLitMat = (m) => { m.onBeforeCompile = obsHellPatch; return m; };
   // shadows are drawn with a separate depth material, which needs the same squash
   const obsDepth = () => obsMat(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }));
   function mergeTagged(list) {
@@ -362,14 +381,15 @@
     }
 
     // meshes
-    const rockMesh = new THREE.Mesh(mergeTagged(rocks), obsMat(rockMat()));
-    const stoneMesh = new THREE.Mesh(mergeTagged(stone), obsMat(rockMat()));
+    const rockMesh = new THREE.Mesh(mergeTagged(rocks), obsLitMat(rockMat()));
+    const stoneMesh = new THREE.Mesh(mergeTagged(stone), obsLitMat(rockMat()));
     for (const m of [rockMesh, stoneMesh]) { m.castShadow = true; m.receiveShadow = true; m.customDepthMaterial = obsDepth(); scene.add(m); }
 
     const treeMat = rockMat();
     W.windU = { uTime: { value: 0 } };
     treeMat.onBeforeCompile = (sh) => {
       obsPatch(sh);
+      hellEdge(sh);
       sh.uniforms.uTime = W.windU.uTime;
       sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>',
         `#include <begin_vertex>

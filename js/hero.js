@@ -55,8 +55,9 @@
     let dmg = base;
     if (t.elite || t.isBoss) dmg *= 1 + s.hunter;
     if (s.berserk > 0) dmg *= 1 + s.berserk * (1 - h.hp / s.maxHp);
+    if (h.cls) dmg *= G.Classes.dealtMult(h, t);
     let crit = false;
-    if (o.canCrit !== false && Math.random() < s.crit) { crit = true; dmg *= s.critMult; }
+    if (o.canCrit !== false && Math.random() < s.crit + (h.cls ? G.Classes.critBonus(h) : 0)) { crit = true; dmg *= s.critMult; }
     dmg *= U.rand(0.92, 1.08);
     t.lastBy = h;
     if (crit) t.critT = 0.3;
@@ -169,6 +170,7 @@
   };
   HS.update = function (dt, t) {
     for (const h of HS.list) h.update(dt, t);
+    G.Classes.update(dt);
     // burning ground left by meteors (damage only on the authoritative machine)
     for (let i = HS.zones.length - 1; i >= 0; i--) {
       const zn = HS.zones[i];
@@ -203,6 +205,9 @@
       this.forge = o.forge != null ? String(o.forge) : G.Upgrades.forgeCode();
       this.colorIdx = (((o.color | 0) % PAL.length) + PAL.length) % PAL.length;
       this.pal = PAL[this.colorIdx];
+      // the character (class): solo is always the shard mage; the player's colour stays on the clothes
+      this.cls = G.Classes.get(o.cls);
+      this.energy = this.cls.energy || this.pal.energy;
       this.lightSlot = HS.takeLight();
       this.build();
       this.reset();
@@ -220,7 +225,7 @@
       const capeM = new THREE.MeshStandardMaterial({ color: this.pal.cape, roughness: 0.75, side: THREE.DoubleSide });
       this.mats = [robeM, steelM, goldM, darkM, capeM];
       for (const m of this.mats) U.addRim(m, 0xfff0d0, 0.45, 2.4);
-      this.glowM = new THREE.MeshBasicMaterial({ color: U.hdr(this.pal.energy, 3) });
+      this.glowM = new THREE.MeshBasicMaterial({ color: U.hdr(this.energy, 3) });
       this.geos = [];
       const add = (geo, mat, x, y, z) => {
         const m = new THREE.Mesh(geo, mat);
@@ -235,13 +240,16 @@
       add(new THREE.CapsuleGeometry(0.3, 0.42, 4, 10), steelM, 0, 1.28, 0);
       add(new THREE.TorusGeometry(0.31, 0.05, 6, 16), goldM, 0, 1.06, 0).rotation.x = Math.PI / 2;
       add(new THREE.SphereGeometry(0.25, 14, 10), darkM, 0, 1.78, 0);
-      add(new THREE.ConeGeometry(0.3, 0.5, 12), robeM, 0, 1.98, 0.04);
       add(new THREE.BoxGeometry(0.34, 0.06, 0.1), this.glowM, 0, 1.78, -0.21);
       for (const sx of [-1, 1]) add(new THREE.SphereGeometry(0.19, 10, 8), goldM, sx * 0.36, 1.52, 0).scale.set(1.1, 0.7, 1.1);
       const capeGeo = new THREE.PlaneGeometry(0.75, 1.2, 1, 4);
       capeGeo.translate(0, -0.45, 0);
       this.cape = add(capeGeo, capeM, 0, 1.5, 0.26);
+      // what makes each character recognisable: the mage's hat, the knight's helm and shield, ...
+      if (this.cls.model) this.cls.model(this, add, { robe: robeM, steel: steelM, gold: goldM, dark: darkM, cape: capeM, glow: this.glowM });
+      else add(new THREE.ConeGeometry(0.3, 0.5, 12), robeM, 0, 1.98, 0.04);
       this.orb = new THREE.Mesh(HS.orbGeo, this.glowM);
+      this.orb.visible = this.cls.orb !== false;
       g.add(this.orb);
       this.ringM = new THREE.MeshBasicMaterial({ color: U.hdr(this.pal.energy, 1.3), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
       this.ring = new THREE.Mesh(HS.ringGeo, this.ringM);
@@ -257,21 +265,23 @@
       scene.add(g);
       if (this.local) {
         this.aimLine = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, 0, -0.5),
-          new THREE.MeshBasicMaterial({ color: U.hdr(this.pal.energy, 1.8), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
+          new THREE.MeshBasicMaterial({ color: U.hdr(this.energy, 1.8), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
         // the lance goes through pillars, rocks and hills, so its range line is drawn through them too
         this.aimLine.renderOrder = 6;
         this.aimLine.visible = false;
         scene.add(this.aimLine);
       }
-      this.bladeMat = new THREE.MeshBasicMaterial({ color: U.hdr(this.pal.energy, 2.6) });
-      this.droneMat = new THREE.MeshStandardMaterial({ color: this.pal.cape, emissive: this.pal.energy, emissiveIntensity: 0.9, metalness: 0.5, roughness: 0.35, flatShading: true });
+      this.bladeMat = new THREE.MeshBasicMaterial({ color: U.hdr(this.energy, 2.6) });
+      this.droneMat = new THREE.MeshStandardMaterial({ color: this.pal.cape, emissive: this.energy, emissiveIntensity: 0.9, metalness: 0.5, roughness: 0.35, flatShading: true });
       this.blades = [];
       this.drones = [];
     }
 
     reset() {
       const s = (this.stats = Hero.baseStats());
+      if (this.cls.stats) this.cls.stats(s); // the character's own body and weapon, then the forge on top
       G.Upgrades.applyForge(s, this.forge);
+      this.tauntT = 0; this.guardT = 0; this.blessT = 0; this.sanctT = 0; this.auraT = 0; this.surgeT = 0;
       this.up = { levels: {}, order: [] };
       this.picks = '';
       this.netPicks = 0;
@@ -309,12 +319,12 @@
       if (!this.auth || this.ultT > 0) return;
       const before = this.ult;
       this.ult = Math.min(100, this.ult + n);
-      if (before < 100 && this.ult >= 100 && this === G.Player) { G.UI.toast('파편 폭풍 준비됨 · R', 'gold'); G.Audio.play('chest'); }
+      if (before < 100 && this.ult >= 100 && this === G.Player) { G.UI.toast(this.cls.ult.name + ' 준비됨 · R', 'gold'); G.Audio.play('chest'); }
     }
     takeDamage(amount, sx, sz) {
       if (!this.auth || !this.alive || this.invuln > 0 || this.dashT > 0 || (this.ultT > 0 && this.stats.avatar)) return false;
       const s = this.stats;
-      const dmg = amount * (30 / (30 + s.armor)) * G.Game.diffDamage();
+      const dmg = amount * (30 / (30 + s.armor)) * G.Game.diffDamage() * G.Classes.takenMult(this);
       this.hp -= dmg;
       this.invuln = 0.55; this.hurtFlash = 1;
       if (this === G.Player) { G.Render.hurt(0.75); G.Render.shake(0.32); G.Audio.play('hurt'); }
@@ -397,15 +407,20 @@
 
     // ---------------- abilities ----------------
     fire(extra = 0) {
-      const s = this.stats;
-      const n = s.projCount + extra + (this.ultT > 0 ? 1 : 0);
+      const s = this.stats, c = this.cls, b = c.basic, ult = this.ultT > 0;
+      // ultimates that change the basic attack: the mage's storm (+1 bolt), the hawk eye (+2 seeking
+      // arrows), the inferno avatar (bigger, harder fireballs)
+      const more = ult ? (c.id === 'shard' ? 1 : c.id === 'ranger' ? 2 : 0) : 0;
+      const n = s.projCount + extra + more;
       const ox = this.x + Math.cos(this.facing + 0.55) * 0.67, oz = this.z + Math.sin(this.facing + 0.55) * 0.67;
       const base = Math.atan2(this.aimZ - oz, this.aimX - ox);
-      const col = this.ultT > 0 ? 0xffd27a : this.pal.energy;
+      const col = ult && c.id === 'shard' ? 0xffd27a : this.energy;
+      const hot = ult && c.id === 'pyro', spread = b.spread || 0.12;
       for (let i = 0; i < n; i++) {
-        const a = base + (i - (n - 1) / 2) * 0.12 + U.rand(-0.02, 0.02);
-        G.Proj.spawnPlayer({ x: ox, z: oz, y: this.y + 1.4, angle: a, speed: s.projSpeed, life: s.projLife, dmg: s.dmg * s.dmgMult,
-          size: s.projSize, pierce: s.pierce, ricochet: s.ricochet, homing: s.homing, color: col, source: 'bolt', procs: true, by: this, cos: !this.auth });
+        const a = base + (i - (n - 1) / 2) * spread + U.rand(-0.02, 0.02);
+        G.Proj.spawnPlayer({ x: ox, z: oz, y: this.y + 1.4, angle: a, speed: s.projSpeed, life: s.projLife, dmg: s.dmg * s.dmgMult * (hot ? 1.4 : 1),
+          size: s.projSize * (hot ? 1.6 : 1), pierce: s.pierce, ricochet: s.ricochet, homing: s.homing + (ult && c.id === 'ranger' ? 1 : 0),
+          knock: b.knock, color: col, source: 'bolt', procs: true, by: this, cos: !this.auth });
       }
       G.FX.burst(ox, this.y + 1.4, oz, { count: 3, color: col, intensity: 2.4, speed: [2, 5], life: [0.08, 0.15], size: [0.28, 0.02], dir: { x: Math.cos(base), y: 0, z: Math.sin(base) }, cone: 0.5 });
       if (this === G.Player) { G.Audio.play('shoot', { pitch: this.ultT > 0 ? 1.25 : 1 }); G.UI.fireKick(); }
@@ -438,14 +453,37 @@
       }
       this.cd.nova = CD.nova * s.cdMult * s.novaCdMult;
     }
-    requestMeteor() {
-      let tx = this.aimX, tz = this.aimZ;
+    // ---- the three skills and the ultimate, whatever the character ----
+    // s1 (right click, charged), s2 (Q), s3 (E, at a chosen point). Each class may replace the shard
+    // mage's version; cooldowns come from the class sheet.
+    useS1(ch) {
+      const c = this.cls, s = this.stats;
+      if (c.s1) c.s1(this, ch); else this.fireLance(ch);
+      this.cd.lance = c.skills[0].cd * s.cdMult;
+      this.surge();
+    }
+    useS2() {
+      const c = this.cls, s = this.stats;
+      if (c.s2) c.s2(this); else this.nova();
+      this.cd.nova = c.skills[1].cd * s.cdMult * s.novaCdMult;
+      this.surge();
+    }
+    useS3(tx, tz) {
+      const c = this.cls, s = this.stats, lim = G.World.ARENA_R + 3;
+      tx = U.clamp(tx, -lim, lim); tz = U.clamp(tz, -lim, lim);
+      if (c.s3) c.s3(this, tx, tz); else this.castMeteor(tx, tz);
+      this.cd.meteor = c.skills[2].cd * s.cdMult;
+    }
+    // the shard mage's trait: casting quickens the hand for a moment
+    surge() { if (this.cls.id === 'shard') this.surgeT = 2; }
+    requestMeteor(tx = this.aimX, tz = this.aimZ) {
       const dx = tx - this.x, dz = tz - this.z, d = Math.hypot(dx, dz);
       if (d > 22) { tx = this.x + (dx / d) * 22; tz = this.z + (dz / d) * 22; }
       this.mt = [tx, tz];
       this.seq.ms++;
-      if (this.auth) this.castMeteor(tx, tz);
-      else this.cd.meteor = CD.meteor * this.stats.cdMult;
+      if (this.auth) this.useS3(tx, tz);
+      else this.cd.meteor = this.cls.skills[2].cd * this.stats.cdMult;
+      this.surge();
     }
     castMeteor(tx, tz) {
       const s = this.stats;
@@ -465,10 +503,11 @@
       this.cd.meteor = CD.meteor * s.cdMult;
     }
     ultStart() {
-      const s = this.stats;
+      const s = this.stats, c = this.cls;
       this.ult = 0;
-      this.ultT = Hero.ULT_TIME + (s.avatar ? 2 : 0);
+      this.ultT = (c.ultDur || Hero.ULT_TIME) + (s.avatar ? 2 : 0);
       this.ultTick = 0;
+      if (c.ultStart) { c.ultStart(this); return; }
       G.Net.vis('ultStart', U.r1(this.x), U.r1(this.z), this.key);
       C.forEachTarget(this.x, this.z, 8, (t) => C.damage(t, (t.isBoss ? 15 : 30) * s.dmgMult, { kx: t.x - this.x, kz: t.z - this.z, knock: 16, source: 'ult', by: this }));
     }
@@ -481,7 +520,7 @@
       this.invuln = Math.max(this.invuln, 0.27);
       this.dashCharges--;
       G.Audio.play('dash');
-      G.FX.ring(this.x, this.y + 0.15, this.z, 0.4, 2, 0.25, this.pal.energy, 1.8);
+      G.FX.ring(this.x, this.y + 0.15, this.z, 0.4, 2, 0.25, this.energy, 1.8);
     }
     stopLanceSound() { if (this.lanceSound) { this.lanceSound.stop(); this.lanceSound = null; } }
 
@@ -517,11 +556,11 @@
       if (this.dashT > 0) {
         this.dashT -= dt;
         this.vx = this.dashDir.x * 46; this.vz = this.dashDir.z * 46;
-        for (let k = 0; k < 3; k++) G.FX.trail(this.x + U.rand(-0.3, 0.3), this.y + U.rand(0.4, 1.8), this.z + U.rand(-0.3, 0.3), this.pal.energy, 0.55, 0.3, 1.8);
+        for (let k = 0; k < 3; k++) G.FX.trail(this.x + U.rand(-0.3, 0.3), this.y + U.rand(0.4, 1.8), this.z + U.rand(-0.3, 0.3), this.energy, 0.55, 0.3, 1.8);
         if (this.dashT <= 0) {
           this.vx *= 0.25; this.vz *= 0.25;
           if (s.blinkNova > 0) {
-            G.Net.vis('ring', U.r1(this.x), U.r1(this.z), 0.4, 4.5, 0.3, this.pal.energy);
+            G.Net.vis('ring', U.r1(this.x), U.r1(this.z), 0.4, 4.5, 0.3, this.energy);
             G.Audio.play('blade');
             if (this.auth) C.forEachTarget(this.x, this.z, 4.5, (tg) => C.damage(tg, 25 * s.blinkNova * s.dmgMult, { kx: tg.x - this.x, kz: tg.z - this.z, knock: 10, source: 'blink', by: this }));
           }
@@ -545,8 +584,13 @@
         return;
       }
       if (I.wasPressed('Space', 'ShiftLeft', 'ShiftRight') && this.dashCharges > 0 && this.dashT <= 0) this.startDash(ix, iz);
-      if (I.wasPressed('KeyQ') && this.cd.nova <= 0) { this.seq.ns++; this.nova(); }
-      if (I.wasPressed('KeyE') && this.cd.meteor <= 0) this.requestMeteor();
+      if (I.wasPressed('KeyQ') && this.cd.nova <= 0) { this.seq.ns++; this.useS2(); }
+      // E lands where you point: the mouse on a desktop, the spot you dragged the button to on a phone
+      if (I.wasPressed('KeyE') && this.cd.meteor <= 0) {
+        const tg = T && T.s3Target;
+        if (tg) { this.requestMeteor(tg.x, tg.z); T.s3Target = null; }
+        else if (!T) this.requestMeteor();
+      }
       if (I.wasPressed('KeyR') && this.ult >= 100 && this.ultT <= 0 && performance.now() - this.ultReq > 600) {
         this.seq.us++;
         this.ultReq = performance.now();
@@ -560,7 +604,7 @@
         if (this.lanceSound) this.lanceSound.set(this.lanceCharge);
         if (Math.random() < 0.6) {
           const a = Math.random() * U.TAU, ox = this.x + Math.cos(this.facing) * 0.9, oz = this.z + Math.sin(this.facing) * 0.9;
-          const c = new THREE.Color(this.pal.energy);
+          const c = new THREE.Color(this.energy);
           G.FX.P.emit(ox + Math.cos(a) * 1.2, this.y + 1.4, oz + Math.sin(a) * 1.2, -Math.cos(a) * 4, 0, -Math.sin(a) * 4, 0.28, 0.3, 0.05, c.r * 2.4, c.g * 2.4, c.b * 2.4, 1, 0, 0);
         }
       }
@@ -568,17 +612,22 @@
         this.charging = false;
         this.stopLanceSound();
         if (this.cd.lance <= 0) {
+          // a phone fires exactly where the skill thumb last pointed, not toward the walking thumb
+          const fd = T && T.takeLanceDir();
+          if (fd) this.facing = Math.atan2(fd[1], fd[0]);
           this.seq.ls++;
           this.lastLc = this.lanceCharge;
-          this.fireLance(this.lanceCharge);
+          this.lastLa = this.facing; // the exact angle travels with the shot, whatever the hero turns to next
+          this.useS1(this.lanceCharge);
         }
       }
       if (this.aimLine) {
         this.aimLine.visible = this.charging;
         if (this.charging) {
+          const am = this.cls.aim(this.lanceCharge, s);
           this.aimLine.position.set(this.x, this.y + 0.12, this.z);
           this.aimLine.rotation.y = -this.facing - Math.PI / 2;
-          this.aimLine.scale.set((0.15 + this.lanceCharge * 1.2) * s.lanceWidth, 1, 28);
+          this.aimLine.scale.set(am.w, 1, am.len);
           this.aimLine.material.opacity = 0.15 + this.lanceCharge * 0.35;
         }
       }
@@ -600,14 +649,14 @@
       this.firing = !!(n.fl & 1) && !this.charging && !G.Game.controlsLocked();
       if (n.fl & 4) {
         this.dashT = Math.max(this.dashT, 0.08);
-        G.FX.trail(this.x + U.rand(-0.3, 0.3), this.y + U.rand(0.4, 1.8), this.z + U.rand(-0.3, 0.3), this.pal.energy, 0.5, 0.3, 1.8);
+        G.FX.trail(this.x + U.rand(-0.3, 0.3), this.y + U.rand(0.4, 1.8), this.z + U.rand(-0.3, 0.3), this.energy, 0.5, 0.3, 1.8);
       }
       if (!this.auth) return;
       const sn = this.seen;
       if (sn.ls === undefined) { sn.ls = n.ls; sn.ns = n.ns; sn.ms = n.ms; sn.us = n.us; return; }
-      if (n.ls !== sn.ls) { sn.ls = n.ls; if (this.cd.lance <= 0.4) this.fireLance(n.lc); }
-      if (n.ns !== sn.ns) { sn.ns = n.ns; if (this.cd.nova <= 0.6) this.nova(); }
-      if (n.ms !== sn.ms) { sn.ms = n.ms; if (this.cd.meteor <= 0.6) this.castMeteor(n.mtx, n.mtz); }
+      if (n.ls !== sn.ls) { sn.ls = n.ls; if (this.cd.lance <= 0.4) { this.facing = n.la != null ? n.la : n.f; this.useS1(n.lc); } }
+      if (n.ns !== sn.ns) { sn.ns = n.ns; if (this.cd.nova <= 0.6) this.useS2(); }
+      if (n.ms !== sn.ms) { sn.ms = n.ms; if (this.cd.meteor <= 0.6) { this.useS3(n.mtx, n.mtz); this.surge(); } }
       if (n.us !== sn.us) { sn.us = n.us; if (this.ult >= 100 && this.ultT <= 0) this.ultStart(); }
     }
 
@@ -632,22 +681,30 @@
         if (this.heartT <= 0) { this.heartT = 0.9; G.Audio.play('heartbeat'); }
       }
       this.fireT -= dt;
-      if (this.firing && this.fireT <= 0) { this.fire(); this.fireT = 1 / (s.fireRate * (this.ultT > 0 ? 1.35 : 1)); }
+      this.surgeT = Math.max(0, this.surgeT - dt);
+      if (this.firing && this.fireT <= 0) { this.fire(); this.fireT = 1 / (s.fireRate * this.rateK()); }
       for (let i = this.echoQ.length - 1; i >= 0; i--) {
         this.echoQ[i] -= dt;
         if (this.echoQ[i] <= 0) { this.echoQ.splice(i, 1); this.fire(); }
       }
-      if (this.auth) { this.updateUlt(dt); this.updateStorm(dt); }
-      if (this.ultT > 0 && Math.random() < 0.5) G.FX.trail(this.x + U.rand(-0.8, 0.8), this.y + U.rand(0.2, 2), this.z + U.rand(-0.8, 0.8), 0xffc35a, 0.5, 0.5, 2.2);
+      if (this.auth) { this.updateUlt(dt); this.updateStorm(dt); G.Classes.tick(this, dt); }
+      if (this.ultT > 0 && this.cls.id === 'shard' && Math.random() < 0.5) G.FX.trail(this.x + U.rand(-0.8, 0.8), this.y + U.rand(0.2, 2), this.z + U.rand(-0.8, 0.8), 0xffc35a, 0.5, 0.5, 2.2);
+      G.Classes.ultLook(this, dt, t);
       this.updateOrbiters(dt, t);
       this.animate(dt, t);
     }
+    // how fast the basic attack fires: the mage's storm and trait, the hawk eye
+    rateK() {
+      const c = this.cls.id, ult = this.ultT > 0;
+      return (ult ? (c === 'shard' ? 1.35 : c === 'ranger' ? 1.8 : 1) : 1) * (this.surgeT > 0 ? 1.4 : 1);
+    }
     updateUlt(dt) {
       if (this.ultT <= 0) return;
-      const s = this.stats;
+      const s = this.stats, c = this.cls;
       this.ultT -= dt;
       this.ultTick -= dt;
       if (this.ultTick > 0) return;
+      if (c.id !== 'shard') { if (c.ultTick) c.ultTick(this); else this.ultTick = 1; return; }
       this.ultTick = 0.22;
       const tg = C.nearest(this.x + U.rand(-8, 8), this.z + U.rand(-8, 8), 14);
       if (!tg) return;
@@ -679,7 +736,7 @@
         const b = this.blades[i];
         b.position.set(bx, this.y + 1.2, bz);
         b.rotation.set(0, -a, 0);
-        if (Math.random() < 0.4) G.FX.trail(bx, this.y + 1.2, bz, this.pal.energy, 0.28, 0.14, 1.6);
+        if (Math.random() < 0.4) G.FX.trail(bx, this.y + 1.2, bz, this.energy, 0.28, 0.14, 1.6);
         if (!this.auth) continue;
         C.forEachTarget(bx, bz, 0.75, (tg) => {
           if ((tg.bladeT || 0) > t) return;
@@ -701,7 +758,7 @@
         if (!tg) { d.t = 0.2; continue; }
         d.t = 0.75;
         G.Proj.spawnPlayer({ x: d.x, z: d.z, y: this.y + 1.8, angle: Math.atan2(tg.z - d.z, tg.x - d.x), speed: 30, life: 0.7, dmg: s.dmg * s.dmgMult * 0.6,
-          size: 0.75, pierce: 0, ricochet: 0, homing: 1, color: this.pal.energy, source: 'drone', procs: true, by: this, cos: !this.auth });
+          size: 0.75, pierce: 0, ricochet: 0, homing: 1, color: this.energy, source: 'drone', procs: true, by: this, cos: !this.auth });
       }
     }
     lightOff() { if (this.lightSlot) this.lightSlot.light.intensity = 0; }
@@ -724,7 +781,7 @@
         const L = this.lightSlot.light;
         L.position.set(this.x, this.y + 1.7, this.z);
         L.intensity = 7 + (this.charging ? this.lanceCharge * 18 : 0) + (this.ultT > 0 ? 9 : 0);
-        L.color.setHex(this.ultT > 0 ? 0xffd27a : this.pal.energy);
+        L.color.setHex(this.ultT > 0 ? 0xffd27a : this.energy);
       }
       this.ring.rotation.y += dt * 2;
       this.ringM.opacity = 0.32 + Math.sin(t * 4) * 0.1;
@@ -744,13 +801,14 @@
     netState() {
       return [U.r2(this.x), U.r2(this.z), U.r2(this.facing), U.r1(this.aimX), U.r1(this.aimZ),
         (this.firing ? 1 : 0) | (this.charging ? 2 : 0) | (this.dashT > 0 ? 4 : 0),
-        this.seq.ls, U.r2(this.charging ? this.lanceCharge : this.lastLc), this.seq.ns, this.seq.ms, U.r1(this.mt[0]), U.r1(this.mt[1]), this.seq.us];
+        this.seq.ls, U.r2(this.charging ? this.lanceCharge : this.lastLc), this.seq.ns, this.seq.ms, U.r1(this.mt[0]), U.r1(this.mt[1]), this.seq.us, U.r2(this.lastLa || 0)];
     }
     applyNet(a) {
       if (!Array.isArray(a) || a.length < 13) return;
       const N = U.num;
       this.net = { x: N(a[0], this.x, -95, 95), z: N(a[1], this.z, -95, 95), f: N(a[2], 0, -10, 10), ax: N(a[3], 0, -140, 140), az: N(a[4], 0, -140, 140),
-        fl: N(a[5], 0, 0, 7) | 0, ls: N(a[6]), lc: N(a[7], 0, 0, 1), ns: N(a[8]), ms: N(a[9]), mtx: N(a[10], 0, -95, 95), mtz: N(a[11], 0, -95, 95), us: N(a[12]) };
+        fl: N(a[5], 0, 0, 7) | 0, ls: N(a[6]), lc: N(a[7], 0, 0, 1), ns: N(a[8]), ms: N(a[9]), mtx: N(a[10], 0, -95, 95), mtz: N(a[11], 0, -95, 95), us: N(a[12]),
+        la: a.length > 13 ? N(a[13], 0, -10, 10) : null };
     }
     // replay another player's card picks (in order) so this machine knows their stats
     syncPicks(str) {

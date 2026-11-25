@@ -151,6 +151,17 @@
     }
   };
   UI.hud = function (on) { E.hud.classList.toggle('hidden', !on); };
+  // the skill bar wears the current character's skills (hover a slot for its name)
+  UI.setHero = function (h) {
+    const c = h.cls, sk = c.skills;
+    const slots = { lmb: [c.basic.icon, c.basic.name], rmb: [sk[0].icon, sk[0].name], q: [sk[1].icon, sk[1].name], e: [sk[2].icon, sk[2].name], r: [c.ult.icon, c.ult.name] };
+    for (const k in slots) {
+      const a = E.ab[k];
+      a.el.querySelector('.ab-icon').innerHTML = G.Icons.svg(slots[k][0]);
+      a.el.title = slots[k][1];
+    }
+    E.ab.dash.el.title = '질주';
+  };
   UI.setPlaying = function (on) { document.body.classList.toggle('playing', on); };
   UI.refreshMenu = function () {
     const d = G.Save.data;
@@ -216,7 +227,7 @@
     for (let i = 0; i < 4; i++) {
       const it = list[i];
       if (!it) { html.push('<li class="empty">빈 자리</li>'); continue; }
-      const tag = [it.host ? '방장' : '', it.me ? '나' : ''].filter(Boolean).join(' · ');
+      const tag = [G.Classes.get(it.cls).name, it.host ? '방장' : '', it.me ? '나' : ''].filter(Boolean).join(' · ');
       html.push(`<li><i style="background:${G.HERO_PAL[it.color].css}"></i><span class="nm"></span><em>${tag}</em></li>`);
     }
     ul.innerHTML = html.join('');
@@ -239,6 +250,29 @@
       b.disabled = !host;
     }
     $('lobby-diff-note').textContent = host ? '방장이 정합니다' : '방장이 고른 난이도';
+    // characters: built once, then only marked (mine / taken by whom); a taken one can't be picked
+    const grid = $('lobby-classes');
+    if (!grid.childElementCount) {
+      grid.innerHTML = G.Classes.order.map((id) => {
+        const c = G.Classes.get(id);
+        return `<button class="cls-card" data-c="${id}" style="--cc:${c.css}"><span class="cls-ico">${G.Icons.svg(c.emblem)}</span><b>${c.name}</b><small>${c.role}</small><i class="cls-who"></i></button>`;
+      }).join('');
+      grid.addEventListener('click', (e) => {
+        const b = e.target.closest('.cls-card');
+        if (b && !b.disabled && G.Net.setClass(b.dataset.c)) G.Audio.play('ui');
+      });
+      grid.addEventListener('mouseover', (e) => { const b = e.target.closest('.cls-card'); UI.clsHover = b ? b.dataset.c : null; renderClsInfo(); });
+      grid.addEventListener('mouseleave', () => { UI.clsHover = null; renderClsInfo(); });
+    }
+    const byCls = new Map(list.map((it) => [it.cls, it]));
+    for (const b of grid.children) {
+      const it = byCls.get(b.dataset.c), mine = !!it && it.me, who = b.querySelector('.cls-who');
+      b.classList.toggle('mine', mine);
+      b.disabled = !!it && !mine;
+      who.textContent = it ? (mine ? '나' : it.name) : '';
+      who.style.display = it ? '' : 'none';
+    }
+    renderClsInfo();
     // what a bigger party changes, for the people in the room right now
     const pa = Gm.PARTY(Math.max(1, list.length)), x = (v) => '×' + (Math.round(v * 100) / 100);
     $('lobby-party').innerHTML = pa.pc < 2 ? '사람이 늘수록 섬이 넓어지고 적이 강해져요'
@@ -253,6 +287,20 @@
     else if (host) setStatus('lobby-status', list.length + '명 모였어요. 준비되면 시작을 누르세요');
     else setStatus('lobby-status', wait || '방장이 시작하기를 기다리는 중', !!wait && !wait.endsWith('...'));
   };
+
+  // the chosen (or hovered) character: trait, basic attack, three skills, ultimate
+  function renderClsInfo() {
+    const id = UI.clsHover || G.Net.classOf(G.Net.me);
+    if (UI.clsInfoKey === id) return;
+    UI.clsInfoKey = id;
+    const c = G.Classes.get(id), m = G.Mobile.on;
+    const keys = m ? ['1번', '2번', '3번', '궁극기'] : ['우클릭', 'Q', 'E', 'R'];
+    $('lobby-cls-info').innerHTML = `<h4>${c.name} <small>${c.role}</small></h4>` +
+      `<p class="trait"><b>특성 · ${c.trait.name}</b> ${c.trait.desc}</p>` +
+      `<ul><li><kbd>${m ? '오른쪽' : '좌클릭'}</kbd><b>${c.basic.name}</b>${c.basic.desc}</li>` +
+      c.skills.map((s, i) => `<li><kbd>${keys[i]}</kbd><b>${s.name}</b>${s.desc}</li>`).join('') +
+      `<li><kbd>${keys[3]}</kbd><b>${c.ult.name}</b>${c.ult.desc}</li></ul>`;
+  }
 
   // ---------------- toasts / banners ----------------
   UI.toast = function (msg, cls = '', life = 2.4) {
@@ -298,10 +346,10 @@
     E['hp-fill'].classList.toggle('low', hpF < 0.3 && P.alive);
     E['lowhp-overlay'].classList.toggle('on', hpF < 0.3 && P.alive);
     E['hp-text'].textContent = Math.ceil(P.hp) + ' / ' + Math.round(maxHp);
-    const ultMax = G.Hero.ULT_TIME + (s.avatar ? 2 : 0);
+    const ultMax = (P.cls.ultDur || G.Hero.ULT_TIME) + (s.avatar ? 2 : 0), un = P.cls.ult.name;
     E['ult-fill'].style.width = (P.ultT > 0 ? P.ultT / ultMax : P.ult / 100) * 100 + '%';
     E['ult-fill'].classList.toggle('ready', P.ult >= 100);
-    E['ult-text'].textContent = P.ultT > 0 ? '파편 폭풍' : P.ult >= 100 ? '파편 폭풍 · R' : '파편 폭풍 ' + Math.floor(P.ult) + '%';
+    E['ult-text'].textContent = P.ultT > 0 ? un : P.ult >= 100 ? un + ' · R' : un + ' ' + Math.floor(P.ult) + '%';
     E['lvl-num'].textContent = Gm.team.lv;
     E['xp-fill'].style.width = U.clamp(Gm.team.xp / Gm.team.xpNext, 0, 1) * 100 + '%';
     E['xp-text'].textContent = '레벨 ' + Gm.team.lv + ' · ' + Math.floor(Gm.team.xp) + ' / ' + Gm.team.xpNext;
@@ -469,7 +517,7 @@
     const P = G.Player, UP = G.Upgrades;
     const html = P ? P.up.order.map((id) => {
       const d = UP.byId[id];
-      return `<div class="upg r-${d.rarity}" title="${U.esc(d.name)}">${G.Icons.svg(d.icon)}<b>${P.up.levels[id]}</b></div>`;
+      return `<div class="upg r-${d.rarity}" title="${U.esc(G.Upgrades.nameOf(d, P))}">${G.Icons.svg(d.icon)}<b>${P.up.levels[id]}</b></div>`;
     }).join('') : '';
     E['upgrade-list'].innerHTML = html;
     $('pause-build').innerHTML = html || '<span class="muted small">아직 고른 카드가 없어요</span>';
@@ -498,7 +546,7 @@
         </svg>
         <div class="c-medal">${G.Icons.svg(d.icon)}</div>
         <div class="c-key">${i + 1}</div>
-        <div class="c-plate"><div class="c-rarity">${UP.RARITY[d.rarity].kr}</div><div class="c-name">${d.name}</div><div class="c-desc">${d.desc(lv + 1, P)}</div><div class="c-level">${lvTxt}</div></div>
+        <div class="c-plate"><div class="c-rarity">${UP.RARITY[d.rarity].kr}</div><div class="c-name">${UP.nameOf(d, P)}</div><div class="c-desc">${UP.descOf(d, lv + 1, P)}</div><div class="c-level">${lvTxt}</div></div>
         <div class="c-arm"><div></div></div>
       </div>`;
     }).join('');

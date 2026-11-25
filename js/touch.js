@@ -2,31 +2,28 @@
 // SHARDFALL - touch: controls for phones and tablets. Only active when core.js decided this is a
 // mobile device (G.Mobile.on); on a desktop this file only defines an inert G.Touch.
 //   left thumb   a floating stick that walks (a light push walks, past halfway runs)
-//   right thumb  a floating stick that aims and shoots while it is held
-//   no right thumb: auto-aim shoots the nearest enemy in range (a boss's weak spot first)
-//   buttons      dash · shard lance (hold to charge, drag to aim, let go to fire) · frost nova ·
-//                meteor (lands where you aim) · shard storm, plus pause and an auto-aim switch
+//   right thumb  a floating stick that aims and shoots while it is held (nothing fires by itself)
+//   buttons      dash · skill 1 (hold to charge, drag to aim, let go to fire) · skill 2 ·
+//                skill 3 (drag to place its ring on the ground, let go to cast) · ultimate · menu
 // The hero asks G.Touch where to aim and walk; the buttons press the keys a keyboard would.
 // ============================================================
 (() => {
   const G = window.G, U = G.U;
   const T = (G.Touch = {
     on: false, mx: 0, mz: 0, mag: 0, held: false, aiming: false, ax: 0, az: -1,
-    lance: false, lanceAim: false, lx: 0, lz: -1, auto: true, target: null,
-    init() {}, update() {}, walk: () => 0, steer: () => false,
+    lance: false, lanceAim: false, lx: 0, lz: -1, s3Target: null,
+    init() {}, update() {}, setHero() {}, walk: () => 0, steer: () => false, takeLanceDir: () => null,
   });
   if (!G.Mobile || !G.Mobile.on) return;
   T.on = true;
-  T.auto = G.Settings.autoAim !== false;
 
-  const R = 58, DEAD_MOVE = 0.14, DEAD_AIM = 0.3, LANCE_DRAG = 16, AIM_DIST = 14;
+  const R = 58, DEAD_MOVE = 0.14, DEAD_AIM = 0.3, LANCE_DRAG = 14, AIM_DIST = 14, S3_DRAG = 14, S3_PX = 95, S3_RANGE = 22;
   const KEYS = { dash: 'Space', q: 'KeyQ', e: 'KeyE', r: 'KeyR' };
   const ICONS = { dash: 'dash', lance: 'spear', q: 'snow', e: 'meteor', r: 'burst' };
   const NAMES = { dash: '질주', lance: '파편 창', q: '서리 노바', e: '운석', r: '파편 폭풍' };
-  const ptr = { move: null, aim: null, lance: null };
+  const ptr = { move: null, aim: null, lance: null, s3: null };
   const sticks = {}, btn = {}, cdMax = {}, cdLast = {};
-  const _v = new THREE.Vector3();
-  let root, lockEl, shown = false, told = false;
+  let root, shown = false, told = false, toldS3 = false, hero = null;
 
   const place = (el, x, y) => { el.style.transform = `translate(${x}px, ${y}px)`; };
   const press = (code) => { G.Input.pressed.add(code); G.Input.down.add(code); };
@@ -40,16 +37,13 @@
       '<div class="tz" data-z="move"></div><div class="tz" data-z="aim"></div>' +
       '<div class="stick ghost" data-s="move"><i></i><span>이동</span></div>' +
       '<div class="stick" data-s="aim"><i></i></div>' +
-      '<div class="tlock"><i></i><i></i><i></i><i></i></div>' +
       '<div class="tpad">' + ['r', 'e', 'q', 'lance', 'dash'].map((k) =>
         `<button class="tb tb-${k}" data-b="${k}" aria-label="${NAMES[k]}"><span class="tb-ico">${G.Icons.svg(ICONS[k])}</span>` +
         '<span class="tb-cd"></span><b class="tb-num"></b>' +
         (k === 'dash' ? '<span class="tb-pips"></span>' : '') + (k === 'lance' ? '<span class="tb-charge"><i></i></span>' : '') +
         `<em>${NAMES[k]}</em></button>`).join('') + '</div>' +
-      '<button class="tmini tb-pause" aria-label="일시정지"><i></i><i></i><i></i></button>' +
-      `<button class="tmini tb-auto${T.auto ? ' on' : ''}" aria-label="자동 조준">자동<br>조준</button>`;
+      '<button class="tmini tb-pause" aria-label="일시정지"><i></i><i></i><i></i></button>';
     document.body.appendChild(root);
-    lockEl = root.querySelector('.tlock');
     for (const el of root.querySelectorAll('.stick')) sticks[el.dataset.s] = { el, knob: el.firstElementChild };
 
     // ---- the two thumb zones ----
@@ -76,21 +70,33 @@
         e.preventDefault();
         try { b.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
         b.classList.add('down');
-        if (k === 'lance') { ptr.lance = { id: e.pointerId, ox: e.clientX, oy: e.clientY }; T.lance = true; T.lanceAim = false; }
+        // skill 1: hold to charge; the line starts where the hero already faces until you drag it
+        if (k === 'lance') {
+          ptr.lance = { id: e.pointerId, ox: e.clientX, oy: e.clientY };
+          T.lance = true; T.lanceAim = false; T.lanceFire = null;
+          const P = G.Player;
+          T.lx = Math.cos(P ? P.facing : -Math.PI / 2); T.lz = Math.sin(P ? P.facing : -Math.PI / 2);
+        } else if (k === 'e') s3Start(e);
         else press(KEYS[k]);
         try { if (navigator.vibrate) navigator.vibrate(8); } catch (err) { /* not allowed */ }
       });
-      // the lance can be dragged like a stick to aim the beam before letting go
       b.addEventListener('pointermove', (e) => {
+        // skill 1 is dragged like a stick to aim the shot before letting go
         const p = ptr.lance;
-        if (k !== 'lance' || !p || p.id !== e.pointerId) return;
-        const dx = e.clientX - p.ox, dy = e.clientY - p.oy, d = Math.hypot(dx, dy);
-        if (d > LANCE_DRAG) { T.lanceAim = true; T.lx = dx / d; T.lz = dy / d; }
+        if (k === 'lance' && p && p.id === e.pointerId) {
+          const dx = e.clientX - p.ox, dy = e.clientY - p.oy, d = Math.hypot(dx, dy);
+          if (d > LANCE_DRAG) { T.lanceAim = true; T.lx = dx / d; T.lz = dy / d; }
+        }
+        // skill 3: the drag places the ring on the ground
+        if (k === 'e' && ptr.s3 && ptr.s3.id === e.pointerId) s3Move(e.clientX, e.clientY);
       });
       const up = (e) => {
         b.classList.remove('down');
-        if (k !== 'lance') release(KEYS[k]);
-        else if (ptr.lance && ptr.lance.id === e.pointerId) { ptr.lance = null; T.lance = false; T.lanceAim = false; }
+        if (k === 'lance') {
+          // remember the last direction: the shot leaves exactly where the skill thumb pointed
+          if (ptr.lance && ptr.lance.id === e.pointerId) { ptr.lance = null; T.lance = false; T.lanceAim = false; T.lanceFire = [T.lx, T.lz]; T.lanceFireAt = performance.now(); }
+        } else if (k === 'e') { if (ptr.s3 && ptr.s3.id === e.pointerId) s3End(e.type === 'pointerup'); }
+        else release(KEYS[k]);
       };
       b.addEventListener('pointerup', up);
       b.addEventListener('pointercancel', up);
@@ -98,15 +104,6 @@
     }
 
     root.querySelector('.tb-pause').addEventListener('click', () => { G.Audio.play('ui'); G.Game.pause(); });
-    const autoB = root.querySelector('.tb-auto');
-    autoB.addEventListener('click', () => {
-      T.auto = !T.auto;
-      autoB.classList.toggle('on', T.auto);
-      G.Settings.autoAim = T.auto;
-      G.saveSettings();
-      G.Audio.play('ui');
-      G.UI.toast(T.auto ? '자동 조준 켜짐 · 손을 떼고 있으면 가까운 적을 알아서 쏩니다' : '자동 조준 꺼짐 · 오른쪽을 끌어서 조준하고 쏘세요', '', 2.4);
-    });
 
     // ---- portrait hint, fullscreen, layout ----
     const rot = document.createElement('div');
@@ -183,52 +180,78 @@
   }
   function releaseAll() {
     for (const k of ['move', 'aim']) if (ptr[k]) stickEnd(k);
-    ptr.lance = null; T.lance = false; T.lanceAim = false;
+    ptr.lance = null; T.lance = false; T.lanceAim = false; T.lanceFire = null;
+    if (ptr.s3) s3End(false);
     for (const k in btn) btn[k].el.classList.remove('down');
     for (const k in KEYS) release(KEYS[k]);
+  }
+
+  // ---------------- skill 3: drag the button to place its ring, let go to cast ----------------
+  // A tap that never drags casts nothing, so the skill never lands somewhere you didn't choose.
+  function s3Start(e) {
+    const P = G.Player;
+    if (!P || !P.alive || P.cd.meteor > 0) return;
+    ptr.s3 = { id: e.pointerId, ox: e.clientX, oy: e.clientY, dx: 0, dz: 0, moved: false, ring: null };
+  }
+  function s3Move(x, y) {
+    const p = ptr.s3, P = G.Player;
+    if (!p || !P) return;
+    const dx = x - p.ox, dy = y - p.oy, d = Math.hypot(dx, dy);
+    if (d > S3_DRAG) p.moved = true;
+    // screen right is +x and screen down is +z; a full drag reaches the skill's range
+    const k = (Math.min(1, d / S3_PX) * S3_RANGE) / (d || 1);
+    p.dx = dx * k; p.dz = dy * k;
+    if (p.moved && !p.ring) p.ring = G.FX.telegraph({ shape: 'circle', x: P.x + p.dx, z: P.z + p.dz, r: P.cls.s3R(P.stats), hold: true, color: 0xffd27a, k: 1.3 });
+  }
+  function s3End(cast) {
+    const p = ptr.s3, P = G.Player;
+    ptr.s3 = null;
+    if (!p) return;
+    if (p.ring) p.ring.kill();
+    if (!cast || !P) return;
+    if (p.moved) { T.s3Target = { x: P.x + p.dx, z: P.z + p.dz }; press(KEYS.e); release(KEYS.e); }
+    else if (!toldS3) { toldS3 = true; G.UI.toast(P.cls.skills[2].name + ' 버튼을 끌어서 떨어질 자리를 정한 뒤 손을 떼세요', '', 3.5); }
   }
 
   // ---------------- what the hero asks ----------------
   // walking speed from how far the thumb pushes: a nudge walks, past halfway runs
   T.walk = () => (T.mag <= 0 ? 0 : U.clamp(0.3 + (T.mag - DEAD_MOVE) * 1.75, 0.3, 1));
 
-  // nearest live target, sticking with the current one unless another is clearly closer
-  function nearest(x, z, r) {
-    let best = null, bd = r * r;
-    for (const e of G.Enemies.list) {
-      if (!e.alive || e.spawnT > 0) continue;
-      const d = (e.x - x) ** 2 + (e.z - z) ** 2;
-      if (d < bd) { bd = d; best = e; }
-    }
-    for (const t of G.Bosses.targets) {
-      if (!t.alive) continue;
-      const d = ((t.x - x) ** 2 + (t.z - z) ** 2) * (t.weak ? 0.35 : 1);
-      if (d < bd) { bd = d; best = t; }
-    }
-    const cur = T.target;
-    if (cur && cur !== best && cur.alive) {
-      const d = ((cur.x - x) ** 2 + (cur.z - z) ** 2) * (cur.weak ? 0.35 : 1);
-      if (d < r * r && d < bd * 1.6) return cur;
-    }
-    return best;
-  }
-
-  // sets the hero's aim point for this frame and says whether to shoot
+  // Sets the hero's aim point for this frame and says whether to shoot. Nothing fires on its own:
+  // the right thumb aims and shoots, a charging skill 1 owns the aim, otherwise you look where you walk.
   T.steer = function (h) {
-    const s = h.stats;
-    const range = U.clamp(s.projSpeed * s.projLife * 1.05, 14, 34);
-    let tx, tz, fire = false, tgt = null;
-    if (T.lance && T.lanceAim) { tx = h.x + T.lx * AIM_DIST; tz = h.z + T.lz * AIM_DIST; }
-    else if (T.held && T.aiming) { tx = h.x + T.ax * AIM_DIST; tz = h.z + T.az * AIM_DIST; fire = true; }
-    else {
-      if (T.auto || T.held || T.lance) tgt = nearest(h.x, h.z, range);
-      if (tgt) { tx = tgt.x; tz = tgt.z; fire = T.auto || T.held; }
-      else if (T.mag > 0 && !T.held) { tx = h.x + T.mx * AIM_DIST; tz = h.z + T.mz * AIM_DIST; }
-      else { tx = h.x + Math.cos(h.facing) * AIM_DIST; tz = h.z + Math.sin(h.facing) * AIM_DIST; fire = T.held; }
-    }
-    T.target = tgt;
+    let tx, tz, fire = false;
+    if (T.lanceFire && performance.now() - T.lanceFireAt > 250) T.lanceFire = null;
+    const lanceDir = T.lance ? [T.lx, T.lz] : T.lanceFire;
+    if (lanceDir) { tx = h.x + lanceDir[0] * AIM_DIST; tz = h.z + lanceDir[1] * AIM_DIST; }
+    else if (T.held) {
+      if (T.aiming) { tx = h.x + T.ax * AIM_DIST; tz = h.z + T.az * AIM_DIST; }
+      else { tx = h.x + Math.cos(h.facing) * AIM_DIST; tz = h.z + Math.sin(h.facing) * AIM_DIST; }
+      fire = true;
+    } else if (T.mag > 0) { tx = h.x + T.mx * AIM_DIST; tz = h.z + T.mz * AIM_DIST; }
+    else { tx = h.x + Math.cos(h.facing) * AIM_DIST; tz = h.z + Math.sin(h.facing) * AIM_DIST; }
     h.aimX = tx; h.aimZ = tz;
     return fire;
+  };
+  // the direction skill 1 was let go in (used once, by the shot itself)
+  T.takeLanceDir = () => { const d = T.lanceFire; T.lanceFire = null; return d; };
+
+  // the buttons wear the current character's skills
+  T.setHero = function (h) {
+    hero = h;
+    if (!root) return;
+    const c = h.cls;
+    const set = (k, icon, name) => {
+      const b = btn[k];
+      if (!b) return;
+      b.el.querySelector('.tb-ico').innerHTML = G.Icons.svg(icon);
+      b.el.querySelector('em').textContent = name;
+      b.el.setAttribute('aria-label', name);
+    };
+    set('lance', c.skills[0].icon, c.skills[0].name);
+    set('q', c.skills[1].icon, c.skills[1].name);
+    set('e', c.skills[2].icon, c.skills[2].name);
+    set('r', c.ult.icon, c.ult.name);
   };
 
   // ---------------- per frame: show/hide, cooldowns, target marker ----------------
@@ -252,7 +275,7 @@
       if (!want) releaseAll();
       else if (!told) {
         told = true;
-        setTimeout(() => shown && G.UI.toast('왼쪽 엄지로 이동하고 오른쪽을 끌어서 조준해요. 손을 떼면 가까운 적을 자동으로 쏩니다', '', 5.5), 1800);
+        setTimeout(() => shown && G.UI.toast('왼쪽 엄지로 이동하고, 오른쪽을 끌면 그쪽으로 쏩니다. 스킬 버튼은 끌어서 방향이나 위치를 정해요', '', 6), 1800);
       }
     }
     if (!want) return;
@@ -274,12 +297,8 @@
     r.el.classList.toggle('ready', P.ult >= 100 && P.ultT <= 0);
     r.el.classList.toggle('active', P.ultT > 0);
     r.num.textContent = P.ult >= 100 || P.ultT > 0 ? '' : Math.floor(P.ult) + '%';
-    // a ring on whatever auto-aim is shooting at
-    const t = T.target;
-    if (t && t.alive && P.alive && !(T.held && T.aiming) && !T.lanceAim) {
-      _v.set(t.x, (t.y || 0) + (t.isBoss ? 2.2 : 1), t.z).project(G.Render.camera);
-      place(lockEl, (_v.x * 0.5 + 0.5) * innerWidth, (-_v.y * 0.5 + 0.5) * innerHeight);
-      lockEl.classList.add('on');
-    } else lockEl.classList.remove('on');
+    // the skill-3 ring rides along with the hero while you hold the button
+    const p3 = ptr.s3;
+    if (p3 && p3.ring) p3.ring.set(P.x + p3.dx, P.z + p3.dz);
   };
 })();

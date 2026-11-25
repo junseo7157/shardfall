@@ -9,7 +9,7 @@
 // ============================================================
 (() => {
   const G = window.G, U = G.U;
-  const PROTO = 'sf7', TAU = Math.PI * 2, MAX_PLAYERS = 4, EV_MAX = 44, BYTE_CAP = 3900;
+  const PROTO = 'sf8', TAU = Math.PI * 2, MAX_PLAYERS = 4, EV_MAX = 44, BYTE_CAP = 3900;
   // positions travel as 12 bits: ±81.9 m in 4 cm steps, enough for the widest (4-player) island
   const POS_O = 81.9, POS_K = 25;
   const enc = new TextEncoder();
@@ -146,11 +146,44 @@
   }
   N.lobbyList = function () {
     const byPeer = new Map(N.peers.map((p) => [p.peer, p]));
+    if (N.role === 'host' && N.phase === 'lobby') assignClasses();
     return N.roster.map((k, i) => {
       const p = byPeer.get(k), pr = (p && p.presence) || {};
       const me = k === N.me;
-      return { key: k, me, host: i === 0, name: me ? N.name : U.clean(pr.nm, 12) || '모험가', color: me ? N.color : U.clamp(U.num(pr.cl, 0) | 0, 0, 3), forge: me ? G.Upgrades.forgeCode() : String(pr.fg || '').replace(/[^0-9]/g, '').slice(0, 11) };
+      return { key: k, me, host: i === 0, name: me ? N.name : U.clean(pr.nm, 12) || '모험가', color: me ? N.color : U.clamp(U.num(pr.cl, 0) | 0, 0, 3), forge: me ? G.Upgrades.forgeCode() : String(pr.fg || '').replace(/[^0-9]/g, '').slice(0, 11), cls: N.classOf(k) };
     });
+  };
+
+  // ---------------- characters: one each, no two alike ----------------
+  // Everyone says which character they want (presence 'ch'); the host settles it in roster order
+  // (the host first, then whoever came in earlier) and publishes the result (w.cl) for all to follow.
+  N.cls = G.Classes.valid(G.Settings.coopClass) ? G.Settings.coopClass : 'shard';
+  N.assigned = new Map();
+  function assignClasses() {
+    const byPeer = new Map(N.peers.map((p) => [p.peer, p])), taken = new Set();
+    N.assigned = new Map();
+    for (const k of N.roster) {
+      const pr = k === N.me ? null : byPeer.get(k) && byPeer.get(k).presence;
+      let want = k === N.me ? N.cls : pr && pr.ch;
+      if (!G.Classes.valid(want) || taken.has(want)) want = G.Classes.order.find((c) => !taken.has(c)) || 'shard';
+      taken.add(want);
+      N.assigned.set(k, want);
+    }
+    return N.roster.map((k) => N.assigned.get(k));
+  }
+  N.classOf = (k) => N.assigned.get(k) || (k === N.me ? N.cls : 'shard');
+  // who already holds a character (another player's key), or null
+  N.classTaker = (id) => { for (const [k, c] of N.assigned) if (c === id && k !== N.me) return k; return null; };
+  N.setClass = function (id) {
+    if (!G.Classes.valid(id) || N.classTaker(id)) return false;
+    N.cls = id;
+    N.clsAt = performance.now();
+    G.Settings.coopClass = id;
+    G.saveSettings();
+    if (N.role === 'host') assignClasses();
+    else N.assigned.set(N.me, id); // shown at once; the host's answer confirms it
+    G.Events.emit('net');
+    return true;
   };
   N.waiting = function () {
     if (N.role !== 'guest') return '';
@@ -281,6 +314,8 @@
   }
   function buildWorld() {
     const w = { ht: Math.round(performance.now()), ph: N.phase, rs: N.roster.slice(), rid: N.runId, df: N.diff };
+    // characters are settled in the lobby and stay fixed for the run
+    w.cl = N.phase === 'lobby' ? assignClasses() : N.roster.map((k) => N.classOf(k));
     if (N.phase === 'lobby' || N.mode !== 'host') return w;
     Object.assign(w, G.Game.netInfo());
     w.h = N.roster.map((k) => {
@@ -299,7 +334,7 @@
   function publish() {
     if (!N.nr) return;
     const P = G.Player;
-    const o = { g: PROTO, rl: N.role === 'host' ? 'h' : 'g', nm: N.name, cl: N.color, fg: G.Upgrades.forgeCode() };
+    const o = { g: PROTO, rl: N.role === 'host' ? 'h' : 'g', nm: N.name, cl: N.color, fg: G.Upgrades.forgeCode(), ch: N.cls };
     if (N.mode !== 'solo' && P && G.Game.inRun()) { o.p = P.netState(); o.up = P.picks; o.pr = G.Game.picksDone; }
     else { o.p = null; o.up = null; o.pr = null; }
     if (N.role === 'host') {
@@ -347,6 +382,17 @@
     if (!w || w === N.lastW || typeof w !== 'object') return;
     N.lastW = w;
     if (Array.isArray(w.rs)) N.roster = w.rs.filter((s) => typeof s === 'string').slice(0, MAX_PLAYERS);
+    // the host's word on who plays which character; if someone beat me to mine, take what I was given
+    if (Array.isArray(w.cl)) {
+      const before = N.classOf(N.me);
+      N.assigned = new Map(N.roster.map((k, i) => [k, G.Classes.valid(w.cl[i]) ? w.cl[i] : 'shard']));
+      const mine = N.assigned.get(N.me);
+      if (mine && mine !== N.cls) {
+        if (performance.now() - (N.clsAt || 0) > 1500) N.cls = mine;
+        else N.assigned.set(N.me, N.cls); // my click is still on its way to the host
+      }
+      if (N.classOf(N.me) !== before) G.Events.emit('net');
+    }
     const df = validDiff(w.df);
     if (df !== N.hostDiff) { N.hostDiff = df; G.Events.emit('net'); }
     const ph = ['lobby', 'play', 'over', 'win'].includes(w.ph) ? w.ph : 'lobby';
