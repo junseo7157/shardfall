@@ -857,9 +857,10 @@
   // base health, armor (hero curve: 30 / (30 + armor) of each hit gets through), attack damage (dm)
   // and time between attacks (cd). The wyrm's armor stays low because its body already shrugs off 70%.
   // Its damage was 2.5 and is 30% lower now: its fire stays on the ground and stacks with the volleys.
+  // The stage 5 and 10 bosses were buffed a little (health +20%, damage +15%, attacks ~9% more often).
   const DEFS = [
-    { cls: Colossus, hp: 5460, armor: 8, dm: 1.3, cd: 0.9 },
-    { cls: Seraph, hp: 7800, armor: 10, dm: 1.3, cd: 0.9 },
+    { cls: Colossus, hp: 6550, armor: 8, dm: 1.5, cd: 0.82 },
+    { cls: Seraph, hp: 9360, armor: 10, dm: 1.5, cd: 0.82 },
     { cls: Wyrm, hp: 23750, armor: 10, dm: 1.75, cd: 1 },
   ];
 

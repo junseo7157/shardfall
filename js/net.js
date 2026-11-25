@@ -9,7 +9,7 @@
 // ============================================================
 (() => {
   const G = window.G, U = G.U;
-  const PROTO = 'sf8', TAU = Math.PI * 2, MAX_PLAYERS = 4, EV_MAX = 44, BYTE_CAP = 3900;
+  const PROTO = 'sf9', TAU = Math.PI * 2, MAX_PLAYERS = 4, EV_MAX = 44, BYTE_CAP = 3900;
   // positions travel as 12 bits: ±81.9 m in 4 cm steps, enough for the widest (4-player) island
   const POS_O = 81.9, POS_K = 25;
   const enc = new TextEncoder();
@@ -209,7 +209,8 @@
   N.roomDiff = () => (N.role === 'guest' ? N.hostDiff : N.diff);
 
   // ---------------- events (host → clients) ----------------
-  const CRIT = new Set(['banner', 'toast', 'bossBar', 'meteor', 'ultStart', 'phoenix', 'heroDie', 'chestOpen', 'warp', 'clearShots', 'bigSlam', 'bossFinal', 'lance', 'nova', 'slam', 'obBreak', 'obGrow']);
+  const CRIT = new Set(['banner', 'toast', 'bossBar', 'meteor', 'ultStart', 'phoenix', 'heroDie', 'chestOpen', 'warp', 'clearShots', 'bigSlam', 'bossFinal', 'lance', 'nova', 'slam', 'obBreak', 'obGrow',
+    'ultFx', 'sumEnd', 'cdReset', 'gdDome', 'enTitan', 'chStop', 'chHaste', 'gsYank', 'zoneFx']);
   function pushEv(e, critical) {
     N.seq++;
     e.unshift(N.seq);
@@ -320,7 +321,7 @@
     Object.assign(w, G.Game.netInfo());
     w.h = N.roster.map((k) => {
       const h = G.Heroes.get(k);
-      return h ? [Math.round(h.hp), Math.round(h.stats.maxHp), h.alive ? 1 : 0, Math.round(h.ult), U.r1(Math.max(0, h.ultT)), h.rv] : 0;
+      return h ? [Math.round(h.hp), Math.round(h.stats.maxHp), h.alive ? 1 : 0, Math.round(h.ult), U.r1(Math.max(0, h.ultT)), h.rv, Math.round(h.shieldHp || 0), h.rvh || 0] : 0;
     });
     w.e = packEnemies();
     w.ob = G.World.brokenCode();
@@ -335,8 +336,9 @@
     if (!N.nr) return;
     const P = G.Player;
     const o = { g: PROTO, rl: N.role === 'host' ? 'h' : 'g', nm: N.name, cl: N.color, fg: G.Upgrades.forgeCode(), ch: N.cls };
-    if (N.mode !== 'solo' && P && G.Game.inRun()) { o.p = P.netState(); o.up = P.picks; o.pr = G.Game.picksDone; }
-    else { o.p = null; o.up = null; o.pr = null; }
+    // the hero's state carries the run it belongs to, so a leftover from the last run is never replayed
+    if (N.mode !== 'solo' && P && G.Game.inRun()) { o.p = P.netState(); o.up = P.picks; o.pr = G.Game.picksDone; o.ri = N.role === 'host' ? N.runId : N.seenRun; }
+    else { o.p = null; o.up = null; o.pr = null; o.ri = null; }
     if (N.role === 'host') {
       const w = buildWorld();
       o.w = w;
@@ -368,7 +370,8 @@
       const h = G.Heroes.get(p.peer);
       if (!h) continue;
       const pr = p.presence;
-      if (pr.p && pr.p !== h.lastNetP) { h.lastNetP = pr.p; h.applyNet(pr.p); }
+      const rid = N.role === 'host' ? N.runId : N.seenRun;
+      if (pr.p && pr.p !== h.lastNetP && U.num(pr.ri, -1) === rid) { h.lastNetP = pr.p; h.applyNet(pr.p); }
       if (typeof pr.up === 'string' && pr.up !== h.lastUp) { h.lastUp = pr.up; h.syncPicks(pr.up); }
       h.netPr = U.num(pr.pr, 0, 0, 999) | 0;
       h.name = U.clean(pr.nm, 12) || h.name;

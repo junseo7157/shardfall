@@ -6,7 +6,8 @@
   const A = (G.Audio = { ready: false });
   let ctx, master, sfxBus, musicBus, comp, noiseBuf, delay, delayFb, delayWet;
   const last = {};
-  const THROTTLE = { shoot: 0.045, hit: 0.03, crit: 0.04, kill: 0.035, pickup: 0.028, enemyShoot: 0.06, lightning: 0.06, explode: 0.07, blade: 0.08, burn: 0.1, slam: 0.1, telegraph: 0.12, portal: 0.15, clink: 0.05 };
+  const THROTTLE = { shoot: 0.045, hit: 0.03, crit: 0.04, kill: 0.035, pickup: 0.028, enemyShoot: 0.06, lightning: 0.06, explode: 0.07, blade: 0.08, burn: 0.1, slam: 0.1, telegraph: 0.12, portal: 0.15, clink: 0.05,
+    flame: 0.12, whirl: 0.2, swing: 0.06, swingHeavy: 0.08, gun: 0.03, turret: 0.08, cannon: 0.1, beamHeal: 0.3, beamHurt: 0.25, cut: 0.05, tick: 0.06, rivet: 0.04, knife: 0.04, bow: 0.05, fireball: 0.05, hawk: 0.3, snap: 0.1 };
 
   A.init = function () {
     if (A.ready) { if (ctx.state === 'suspended') ctx.resume(); return; }
@@ -146,6 +147,56 @@
     heartbeat(t) { tone('sine', 70, 45, t, 0.005, 0.12, 0.35); tone('sine', 65, 42, t + 0.16, 0.005, 0.12, 0.25); },
     freeze(t) { [2400, 3100, 3900].forEach((f, i) => tone('sine', f, f * 1.05, t + i * 0.03, 0.002, 0.15, 0.025)); },
     reroll(t) { noise(t, 0.01, 0.15, 0.1, 'bandpass', 1200, 4000, 2); },
+    // ---- the characters ----
+    swing(t) { noise(t, 0.01, 0.11, 0.11, 'bandpass', 700, 2400, 1.4); },
+    swingHeavy(t) { noise(t, 0.015, 0.18, 0.14, 'bandpass', 400, 1500, 1.2); tone('sine', 120, 70, t + 0.05, 0.005, 0.12, 0.08); },
+    whirl(t) { noise(t, 0.02, 0.2, 0.08, 'bandpass', 600, 1800, 2.5); },
+    flame(t) { noise(t, 0.02, 0.16, 0.07, 'lowpass', 1800, 900, 0.7); noise(t, 0.01, 0.1, 0.03, 'highpass', 3000, 2500); },
+    fireball(t) { noise(t, 0.005, 0.12, 0.07, 'lowpass', 2200, 600); tone('sine', 300, 150, t, 0.004, 0.08, 0.03); },
+    fireDash(t) { noise(t, 0.01, 0.35, 0.2, 'lowpass', 2600, 400, 0.8); tone('sawtooth', 220, 90, t, 0.01, 0.3, 0.05, sfxBus, { f: 900 }); },
+    gun(t) { noise(t, 0.001, 0.09, 0.28, 'lowpass', 3500, 600, 0.6); tone('square', 160, 60, t, 0.001, 0.08, 0.12, sfxBus, { f: 1200 }); noise(t, 0.001, 0.03, 0.12, 'highpass', 5000, 4000); },
+    reloadStart(t) { tone('square', 900, 700, t, 0.001, 0.03, 0.04); },
+    reload(t) { tone('square', 1300, 1100, t, 0.001, 0.025, 0.05); tone('square', 900, 800, t + 0.07, 0.001, 0.03, 0.05); noise(t + 0.12, 0.002, 0.04, 0.06, 'bandpass', 2600, 2000, 3); },
+    rivet(t) { tone('square', 700, 380, t, 0.002, 0.05, 0.05, sfxBus, { f: 2400 }); noise(t, 0.001, 0.03, 0.04, 'highpass', 4000, 3000); },
+    knife(t) { noise(t, 0.003, 0.06, 0.07, 'bandpass', 3000, 5000, 2); },
+    bow(t) { tone('triangle', 420, 180, t, 0.002, 0.09, 0.07); noise(t, 0.002, 0.05, 0.05, 'highpass', 3500, 2500); },
+    snipe(t, o) { const k = o.power || 1; tone('triangle', 700, 140, t, 0.002, 0.2, 0.1 * k); noise(t, 0.002, 0.18, 0.12 * k, 'bandpass', 2800, 900, 1.5); },
+    snap(t) { tone('square', 1500, 900, t, 0.001, 0.05, 0.08); noise(t, 0.001, 0.08, 0.12, 'bandpass', 2000, 1200, 2); },
+    hawk(t) { tone('sawtooth', 2400, 1500, t, 0.02, 0.28, 0.035, sfxBus, { f: 3400, q: 3 }); tone('sine', 2100, 1700, t + 0.08, 0.01, 0.2, 0.025); },
+    deploy(t) { tone('square', 300, 600, t, 0.005, 0.1, 0.05, sfxBus, { f: 1600 }); tone('square', 600, 900, t + 0.1, 0.005, 0.08, 0.04, sfxBus, { f: 1800 }); noise(t + 0.18, 0.002, 0.08, 0.08, 'bandpass', 1500, 900, 2); },
+    turret(t) { tone('square', 1100, 500, t, 0.001, 0.04, 0.03, sfxBus, { f: 3000 }); },
+    cannon(t) { noise(t, 0.003, 0.4, 0.3, 'lowpass', 900, 120, 0.7); tone('sine', 90, 40, t, 0.004, 0.35, 0.3); },
+    mineThrow(t) { [0, 0.06, 0.12, 0.18, 0.24].forEach((d) => tone('square', 1600, 1500, t + d, 0.001, 0.025, 0.025)); },
+    empCharge(t) { tone('sawtooth', 200, 1800, t, 0.05, 0.45, 0.04, sfxBus, { f: 2400 }); },
+    emp(t) { noise(t, 0.002, 0.4, 0.25, 'bandpass', 3000, 600, 1); tone('square', 1800, 90, t, 0.002, 0.35, 0.06, sfxBus, { f: 3000 }); },
+    shieldUp(t) { tone('triangle', 520, 780, t, 0.005, 0.15, 0.07); noise(t, 0.005, 0.12, 0.06, 'bandpass', 1800, 2600, 3); },
+    bash(t) { tone('sine', 140, 50, t, 0.003, 0.35, 0.4); noise(t, 0.003, 0.3, 0.25, 'lowpass', 1600, 200); tone('triangle', 900, 600, t, 0.002, 0.2, 0.06); },
+    throw(t) { noise(t, 0.02, 0.3, 0.08, 'bandpass', 900, 2200, 2); },
+    banner(t) { [55, 62, 67].forEach((m, i) => tone('sawtooth', mtof(m), mtof(m), t + i * 0.09, 0.03, 0.5, 0.05, sfxBus, { f: 1400 })); tone('sine', 80, 45, t, 0.01, 0.4, 0.25); },
+    dome(t) { [64, 71, 76, 83].forEach((m, i) => tone('sine', mtof(m), mtof(m), t + i * 0.06, 0.01, 0.9, 0.05)); noise(t, 0.05, 0.9, 0.08, 'highpass', 2500, 6000); },
+    holyShield(t) { [76, 81, 88].forEach((m, i) => tone('sine', mtof(m), mtof(m) * 1.01, t + i * 0.05, 0.005, 0.5, 0.06)); },
+    beamHeal(t) { tone('sine', 1320, 1400, t, 0.02, 0.25, 0.025); },
+    beamHurt(t) { tone('sawtooth', 700, 650, t, 0.02, 0.2, 0.02, sfxBus, { f: 1800 }); },
+    leap(t) { noise(t, 0.02, 0.35, 0.12, 'bandpass', 400, 1800, 1.2); tone('sine', 200, 420, t, 0.02, 0.3, 0.06); },
+    warCry(t) {
+      const o = tone('sawtooth', 130, 85, t, 0.05, 0.9, 0.22, sfxBus, { f: 900, q: 2 });
+      const l = ctx.createOscillator(), lg = ctx.createGain();
+      l.frequency.value = 13; lg.gain.value = 12; l.connect(lg); lg.connect(o.frequency); l.start(t); l.stop(t + 1);
+      noise(t, 0.05, 0.8, 0.18, 'bandpass', 500, 300, 1.5);
+    },
+    shadowStep(t) { noise(t, 0.005, 0.18, 0.12, 'bandpass', 3000, 600, 1.5); tone('sine', 900, 200, t, 0.004, 0.15, 0.05); },
+    vanish(t) { noise(t, 0.02, 0.5, 0.12, 'lowpass', 2000, 300, 0.8); tone('sine', 600, 300, t, 0.02, 0.4, 0.04); },
+    markDeath(t) { tone('sawtooth', 220, 110, t, 0.01, 0.5, 0.06, sfxBus, { f: 900, q: 4 }); tone('sine', 880, 870, t, 0.005, 0.4, 0.03); },
+    markBurst(t) { SFX.crit(t); noise(t, 0.003, 0.35, 0.2, 'bandpass', 1400, 300, 1); tone('sine', 300, 60, t, 0.003, 0.3, 0.2); },
+    cut(t) { noise(t, 0.002, 0.07, 0.1, 'bandpass', 4000, 1800, 2.5); },
+    tick(t) { tone('sine', 1900, 1900, t, 0.001, 0.03, 0.035); },
+    tickTock(t) { [0, 0.25, 0.5].forEach((d, i) => tone('sine', i % 2 ? 1500 : 2000, i % 2 ? 1500 : 2000, t + d, 0.001, 0.04, 0.05)); },
+    rewind(t) { tone('sine', 1600, 300, t, 0.01, 0.4, 0.06); noise(t, 0.02, 0.35, 0.08, 'bandpass', 4000, 800, 2); },
+    haste(t) { [72, 79, 84].forEach((m, i) => tone('triangle', mtof(m), mtof(m + 12), t + i * 0.04, 0.005, 0.18, 0.05)); },
+    timeStop(t) { tone('sine', 900, 40, t, 0.01, 1.2, 0.2); noise(t, 0.02, 1.0, 0.12, 'lowpass', 3000, 100, 0.7); [0, 0.5, 1.0].forEach((d) => tone('sine', 1200, 1200, t + 0.3 + d, 0.001, 0.05, 0.05)); },
+    timeResume(t) { tone('sine', 60, 700, t, 0.01, 0.4, 0.1); },
+    roll(t) { noise(t, 0.01, 0.2, 0.1, 'bandpass', 500, 1200, 1); },
+    lasso(t) { noise(t, 0.01, 0.25, 0.09, 'bandpass', 1400, 600, 2); tone('triangle', 500, 900, t, 0.01, 0.2, 0.04); },
   };
 
   A.play = function (name, o = {}) {

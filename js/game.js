@@ -201,12 +201,13 @@
     if (mode === 'host') { G.Net.evBuf = []; G.Net.runId++; G.Net.setPhase('play'); }
     if (mode !== 'client') nextWave();
     else G.Audio.music('combat');
-    if (G.Save.data.runs <= 3) {
-      const tips = G.Touch.on
-        ? ['파편 창은 누르고 있다가 떼면 나갑니다. 버튼을 끌면 그 방향으로 쏩니다', '질주하는 동안은 맞지 않습니다']
-        : ['왼쪽 버튼을 누르고 있으면 연사, 오른쪽 버튼은 모았다가 놓기', 'Space나 Shift로 질주. 질주하는 동안은 맞지 않습니다'];
-      setTimeout(() => Gm.state === 'playing' && G.UI.toast(tips[0], '', 5), G.Touch.on ? 8000 : 2600);
-      setTimeout(() => Gm.state === 'playing' && G.UI.toast(tips[1], '', 5), G.Touch.on ? 9000 : 3600);
+    // a word on this character's first skill (co-op characters always; the shard mage for new players)
+    const c = G.Player.cls;
+    if (G.Save.data.runs <= 3 || c.id !== 'shard') {
+      const s1 = c.skills[0], how = G.Classes.HOW[s1.kind][G.Touch.on ? 1 : 0];
+      const tips = [c.name + ' · ' + c.trait.name + ': ' + c.trait.desc, (G.Touch.on ? '1번 ' : '우클릭 ') + s1.name + ': ' + how,
+        G.Touch.on ? '질주하는 동안은 맞지 않습니다' : 'Space나 Shift로 질주. 질주하는 동안은 맞지 않습니다'];
+      tips.forEach((tx, i) => setTimeout(() => Gm.state === 'playing' && G.UI.toast(tx, '', 5), (G.Touch.on ? 7000 : 2400) + i * 1300));
     }
   };
   Gm.pause = function () {
@@ -411,7 +412,8 @@
     G.Net.roster.forEach((key, i) => {
       const h = G.Heroes.get(key), a = w.h[i];
       if (!h || !Array.isArray(a)) return;
-      const hp = n(a[0], h.hp, 0, 1e6), alive = !!a[2], rv = n(a[5], 0, 0, 999) | 0;
+      const hp = n(a[0], h.hp, 0, 1e6), alive = !!a[2], rv = n(a[5], 0, 0, 999) | 0, here = !!a[7];
+      h.shieldHp = n(a[6], 0, 0, 1e4);
       if (h === G.Player && alive && hp < h.hp - 0.5 && h.alive) {
         G.Render.hurt(0.75); G.Render.shake(0.32); G.Audio.play('hurt');
         G.FX.dmgNumber(h.x, h.y + 1.8, h.z, '-' + Math.round(h.hp - hp), 'player');
@@ -424,7 +426,8 @@
       if (h === G.Player && before < 100 && h.ult >= 100) { G.UI.toast(h.cls.ult.name + ' 준비됨 · R', 'gold'); G.Audio.play('chest'); }
       h.ultT = n(a[4], 0, 0, 20);
       if (rv !== h.rv) {
-        if (h === G.Player && alive) { h.revive(0.5); G.UI.toast('다시 일어났어요', 'good'); }
+        // by the altar after a cleared stage, or right where they fell (the cleric's hymn)
+        if (h === G.Player && alive) { h.revive(0.5, here); G.UI.toast('다시 일어났어요', 'good'); }
         h.rv = rv;
       }
       if (alive !== h.alive) {
@@ -442,10 +445,13 @@
     ws = 'intro'; waveT = 2.6; spawned = 0; spawnT = 0; chestThisStage = false;
     budget = Math.round((isBoss ? 8 + n * 2 : 14 + n * 7 + n * n * 0.35) * party.count);
     elitesLeft = n >= 3 ? 1 + Math.floor(n / 5) + (pc - 1) : 0;
-    G.Enemies.hpScale = (1 + (n - 1) * 0.15) * (n > FINAL_WAVE ? 1 + (n - FINAL_WAVE) * 0.12 : 1) * party.hp * D().k;
+    G.Enemies.hpScale = (1 + (n - 1) * 0.2) * (n > FINAL_WAVE ? 1 + (n - FINAL_WAVE) * 0.12 : 1) * party.hp * D().k;
+    // ordinary monsters also hit harder and move faster stage by stage (on top of diffDamage)
+    G.Enemies.dmgScale = 1 + (n - 1) * 0.03 + Math.max(0, n - FINAL_WAVE) * 0.04;
+    G.Enemies.speedScale = 1 + Math.min(0.15, (n - 1) * 0.011);
     G.World.setAltarActive(false);
     // fallback: someone who fell during the break between stages comes back as the next one starts
-    for (const h of G.Heroes.list) if (!h.alive && Gm.mode === 'host') h.revive(0.5);
+    for (const h of G.Heroes.list) if (!h.alive && Gm.mode === 'host' && Gm.state === 'playing') h.revive(0.5);
     const title = '스테이지 ' + n;
     if (isBoss) G.Net.vis('banner', title, n > FINAL_WAVE ? '각성한 보스가 내려옵니다' : '보스가 내려옵니다', 'boss');
     else if (NEW_ENEMY[n]) G.Net.vis('banner', title, '새 적 · ' + NEW_ENEMY[n][0] + ' — ' + NEW_ENEMY[n][1], '');
@@ -532,8 +538,9 @@
     G.Net.vis('clearShots');
     G.World.setAltarActive(true);
     G.Save.data.bestWave = Math.max(G.Save.data.bestWave, n);
-    // co-op: the stage is cleared, so whoever fell in it gets back up (by the altar, in time to heal)
-    if (Gm.mode === 'host') {
+    // co-op: the stage is cleared, so whoever fell in it gets back up (by the altar, in time to heal);
+    // a lost run stays lost (the world keeps moving behind the results screen)
+    if (Gm.mode === 'host' && Gm.state === 'playing') {
       const fallen = G.Heroes.list.filter((h) => !h.alive);
       for (const h of fallen) h.revive(0.5);
       if (fallen.length) G.Net.vis('toast', fallen.map((h) => h.name || '동료').join(', ') + '님이 다시 일어났어요', 'good');
@@ -575,7 +582,8 @@
     Gm.score += e.def.score * (e.elite ? 5 : 1) * Gm.comboMult() * (1 + (Gm.wave - 1) * 0.05) * D().rw;
     const h = e.lastBy && G.Heroes.list.includes(e.lastBy) ? e.lastBy : G.Heroes.nearest(e.x, e.z);
     if (h) {
-      h.addUlt((e.elite ? 5 : 0.8) * h.stats.ultGain);
+      // the ultimate fills slowly: a kill is 0.5%, an elite 3%
+      h.addUlt((e.elite ? 3 : 0.5) * h.stats.ultGain);
       if (h.stats.lifestealKill > 0 && Math.random() < h.stats.lifestealKill) h.heal(3);
     }
     if (Math.random() < 0.004) G.Pickups.dropMagnet(e.x, e.z);
@@ -652,7 +660,7 @@
       director(dt);
       G.Heroes.update(dt, t);
       G.Enemies.update(dt, t);
-      G.Bosses.update(dt);
+      G.Bosses.update(dt * G.Classes.bossK()); // a time stop slows the boss to a crawl
       G.Proj.update(dt);
       G.Pickups.update(dt);
       Gm.comboT -= dt;
@@ -675,7 +683,7 @@
     G.Net.clientWorld(dt, t);
     if (!Gm.pickPause) G.Heroes.update(dt, t);
     G.Proj.update(dt);
-    G.Bosses.update(dt);
+    G.Bosses.update(dt * G.Classes.bossK());
     G.Pickups.update(dt);
     G.Vis.update(dt);
     G.World.update(dt, t, P.x, P.z);

@@ -2,11 +2,14 @@
 // SHARDFALL - heroes: player characters (solo, co-op host, co-op client), abilities, combat helpers
 //   drive 'input' = controlled on this machine, 'net' = follows another player's presence
 //   auth  true    = this machine deals the damage (solo / host), false = visuals only (client)
+// Skills: every character has three (slot 1 = right click, 2 = Q, 3 = E) and an ultimate (R).
+//   A skill's kind decides how it is used: charge (hold, let go), channel (hold to keep it up),
+//   aim (cast toward the aim), place (cast at a point), self (cast at once). classes.js says what
+//   each one does; this file reads the input, tells the other players and runs it here.
 // ============================================================
 (() => {
   const G = window.G, U = G.U, I = G.Input;
   const _aim = new THREE.Vector3();
-  const CD = { lance: 3.2, nova: 9, meteor: 11 };
   const PAL = [
     { robe: 0x2f5aa8, cape: 0xd39a35, energy: 0x9fd0ff, css: '#6f9be6', name: '코발트' },
     { robe: 0xa3323f, cape: 0xe6d9bb, energy: 0xff9d8c, css: '#e46b74', name: '루비' },
@@ -14,6 +17,8 @@
     { robe: 0xb0761d, cape: 0x3559a8, energy: 0xffd27a, css: '#f3c766', name: '호박' },
   ];
   const SPAWN = [[0, 3.2], [3.2, 0], [-3.2, 0], [0, -3.2]];
+  const SK = ['', 's1', 's2', 's3'];
+  const ULT_BOSS = 0.002; // ultimate charge per point of damage on a boss (kills: game.js)
   G.HERO_PAL = PAL;
 
   // ================= combat helpers =================
@@ -48,16 +53,17 @@
     }
     return best;
   };
-  // the one place damage is dealt. o: by (hero), canCrit, procs, kx, kz, knock, source, cls
+  // the one place damage is dealt. o: by (hero), canCrit, crit (forced), procs, kx, kz, knock, source, cls
   C.damage = function (t, base, o = {}) {
     if (!t || !t.alive || !G.auth()) return 0;
     const h = o.by || G.Player, s = h.stats;
     let dmg = base;
     if (t.elite || t.isBoss) dmg *= 1 + s.hunter;
     if (s.berserk > 0) dmg *= 1 + s.berserk * (1 - h.hp / s.maxHp);
-    if (h.cls) dmg *= G.Classes.dealtMult(h, t);
-    let crit = false;
-    if (o.canCrit !== false && Math.random() < s.crit + (h.cls ? G.Classes.critBonus(h) : 0)) { crit = true; dmg *= s.critMult; }
+    if (h.cls) dmg *= G.Classes.dealtMult(h, t, o);
+    let crit = o.crit === true;
+    if (!crit && o.canCrit !== false && Math.random() < s.crit + (h.cls ? G.Classes.critBonus(h, t) : 0)) crit = true;
+    if (crit) dmg *= s.critMult;
     dmg *= U.rand(0.92, 1.08);
     t.lastBy = h;
     if (crit) t.critT = 0.3;
@@ -70,8 +76,9 @@
     G.FX.dmgNumber(t.x, (t.y || 0) + (t.h || 1.2), t.z, Math.round(dealt), t.lastResist ? 'resist' : crit ? 'crit' : o.cls || '');
     G.Audio.play(t.lastResist ? 'clink' : crit ? 'crit' : 'hit');
     G.Game.stats.damage += dealt;
-    if (t.isBoss && o.source !== 'ult') h.addUlt(dealt * 0.003 * s.ultGain);
-    if (h === G.Player && (o.source === 'bolt' || o.source === 'drone')) G.UI.hitMarker();
+    if (t.isBoss && o.source !== 'ult') h.addUlt(dealt * ULT_BOSS * s.ultGain);
+    if (h === G.Player && (o.source === 'bolt' || o.source === 'drone' || o.source === 'melee')) G.UI.hitMarker();
+    if (h.cls) G.Classes.onHit(h, t, dealt, crit, killed, o);
     if (o.procs) procs(t, dmg, h, killed);
     return dmg;
   };
@@ -148,10 +155,11 @@
   HS.get = (key) => HS.list.find((h) => h.key === key) || null;
   HS.alive = () => HS.list.filter((h) => h.alive);
   HS.anyAlive = () => HS.list.some((h) => h.alive);
+  // what a monster can see: a hero hidden in the shadows doesn't count
   HS.nearest = function (x, z, maxR = 1e9) {
     let best = null, bd = maxR * maxR;
     for (const h of HS.list) {
-      if (!h.alive) continue;
+      if (!h.alive || h.stealthT > 0 || G.Classes.immune(h)) continue;
       const d = U.dist2(x, z, h.x, h.z);
       if (d < bd) { bd = d; best = h; }
     }
@@ -184,6 +192,7 @@
   };
 
   // ================= hero =================
+  const NOMOD = {};
   class Hero {
     static baseStats() {
       return {
@@ -214,7 +223,7 @@
     }
 
     build() {
-      const scene = G.Render.scene;
+      const scene = G.Render.scene, c = this.cls, bare = c.bare || [];
       const g = (this.group = new THREE.Group());
       const body = (this.body = new THREE.Group());
       g.add(body);
@@ -227,6 +236,7 @@
       for (const m of this.mats) U.addRim(m, 0xfff0d0, 0.45, 2.4);
       this.glowM = new THREE.MeshBasicMaterial({ color: U.hdr(this.energy, 3) });
       this.geos = [];
+      this.parts = {};
       const add = (geo, mat, x, y, z) => {
         const m = new THREE.Mesh(geo, mat);
         m.position.set(x, y, z);
@@ -241,15 +251,15 @@
       add(new THREE.TorusGeometry(0.31, 0.05, 6, 16), goldM, 0, 1.06, 0).rotation.x = Math.PI / 2;
       add(new THREE.SphereGeometry(0.25, 14, 10), darkM, 0, 1.78, 0);
       add(new THREE.BoxGeometry(0.34, 0.06, 0.1), this.glowM, 0, 1.78, -0.21);
-      for (const sx of [-1, 1]) add(new THREE.SphereGeometry(0.19, 10, 8), goldM, sx * 0.36, 1.52, 0).scale.set(1.1, 0.7, 1.1);
+      if (!bare.includes('shoulders')) for (const sx of [-1, 1]) add(new THREE.SphereGeometry(0.19, 10, 8), goldM, sx * 0.36, 1.52, 0).scale.set(1.1, 0.7, 1.1);
       const capeGeo = new THREE.PlaneGeometry(0.75, 1.2, 1, 4);
       capeGeo.translate(0, -0.45, 0);
       this.cape = add(capeGeo, capeM, 0, 1.5, 0.26);
       // what makes each character recognisable: the mage's hat, the knight's helm and shield, ...
-      if (this.cls.model) this.cls.model(this, add, { robe: robeM, steel: steelM, gold: goldM, dark: darkM, cape: capeM, glow: this.glowM });
+      if (c.model) c.model(this, add, { robe: robeM, steel: steelM, gold: goldM, dark: darkM, cape: capeM, glow: this.glowM });
       else add(new THREE.ConeGeometry(0.3, 0.5, 12), robeM, 0, 1.98, 0.04);
       this.orb = new THREE.Mesh(HS.orbGeo, this.glowM);
-      this.orb.visible = this.cls.orb !== false;
+      this.orb.visible = c.orb !== false;
       g.add(this.orb);
       this.ringM = new THREE.MeshBasicMaterial({ color: U.hdr(this.pal.energy, 1.3), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
       this.ring = new THREE.Mesh(HS.ringGeo, this.ringM);
@@ -261,12 +271,20 @@
       this.bubble.position.y = 1.0;
       this.bubble.visible = false;
       g.add(this.bubble);
-      g.scale.setScalar(1.22);
+      // the cleric's holy shield, on whoever carries one
+      this.shieldM = new THREE.MeshBasicMaterial({ color: U.hdr(0xffe6a0, 1.3), transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false });
+      this.shieldB = new THREE.Mesh(HS.bubbleGeo, this.shieldM);
+      this.shieldB.position.y = 1.0;
+      this.shieldB.scale.setScalar(1.12);
+      this.shieldB.visible = false;
+      g.add(this.shieldB);
+      this.baseScale = 1.22 * (c.size || 1);
+      g.scale.setScalar(this.baseScale);
       scene.add(g);
       if (this.local) {
         this.aimLine = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, 0, -0.5),
           new THREE.MeshBasicMaterial({ color: U.hdr(this.energy, 1.8), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
-        // the lance goes through pillars, rocks and hills, so its range line is drawn through them too
+        // a beam goes through pillars, rocks and hills, so its range line is drawn through them too
         this.aimLine.renderOrder = 6;
         this.aimLine.visible = false;
         scene.add(this.aimLine);
@@ -281,39 +299,46 @@
       const s = (this.stats = Hero.baseStats());
       if (this.cls.stats) this.cls.stats(s); // the character's own body and weapon, then the forge on top
       G.Upgrades.applyForge(s, this.forge);
-      this.tauntT = 0; this.guardT = 0; this.blessT = 0; this.sanctT = 0; this.auraT = 0; this.surgeT = 0;
+      G.Classes.resetHero(this);
       this.up = { levels: {}, order: [] };
       this.picks = '';
       this.netPicks = 0;
       const sp = SPAWN[this.slot % SPAWN.length];
       this.x = sp[0]; this.z = sp[1]; this.y = G.World.heightAt(this.x, this.z);
-      this.vx = 0; this.vz = 0;
+      this.vx = 0; this.vz = 0; this.moveX = 0; this.moveZ = 0;
       this.facing = -Math.PI / 2; this.aimX = this.x; this.aimZ = this.z - 5;
       this.hp = s.maxHp; this.maxHp = s.maxHp; this.alive = true;
       this.invuln = 1.0; this.hurtFlash = 0; this.dashT = 0; this.dashCharges = s.dashCharges; this.dashRecharge = 0; this.dashDir = { x: 0, z: -1 };
-      this.fireT = 0; this.lanceCharge = 0; this.lastLc = 0; this.charging = false; this.firing = false;
-      this.cd = { lance: 0, nova: 0, meteor: 0 };
+      this.fireT = 0; this.lanceCharge = 0; this.lastLc = 0; this.charging = false; this.chgSlot = 0; this.firing = false;
+      this.chan = 0; this.chanT = 0; this.leap = null; this.hop = 0; this.leapVis = false; this.leapVisT = 0; this.stealthVis = false;
+      this.cd = { s1: 0, s2: 0, s3: 0 };
       this.ult = 0; this.ultT = 0; this.ultTick = 0; this.ultReq = 0;
       this.bladeA = Math.random() * 6; this.stormT = 0; this.heartT = 0;
       this.echoQ = [];
       this.rerolls = s.rerolls;
-      this.seq = { ls: 0, ns: 0, ms: 0, us: 0 };
-      this.mt = [0, 0];
-      this.seen = {};
+      this.seq = { s1: 0, s2: 0, s3: 0, us: 0 };
+      this.ca = [null, [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+      // every run starts every counter at zero (presences from an older run are never applied)
+      this.seen = { s1: 0, s2: 0, s3: 0, us: 0 };
       this.net = null;
-      this.rv = 0;
+      this.rv = 0; this.rvh = 0;
+      this.lastOp = 1;
       this.stopLanceSound();
       this.syncOrbiters();
       this.group.visible = true;
+      this.group.scale.setScalar(this.baseScale);
     }
 
     // ---------------- health ----------------
-    heal(n, silent) {
-      if (!this.alive || !this.auth) return;
+    // by: the hero doing the healing (a cleric charges its ultimate by mending others)
+    heal(n, silent, by) {
+      if (!this.alive || !this.auth) return 0;
       const before = this.hp;
       this.hp = Math.min(this.stats.maxHp, this.hp + n);
       const d = this.hp - before;
       if (d >= 1 && !silent) G.Net.vis('heal', U.r1(this.x), U.r1(this.z), Math.round(d));
+      if (d > 0 && by && by !== this && by.cls.healUlt) by.addUlt(d * by.cls.healUlt);
+      return d;
     }
     addUlt(n) {
       if (!this.auth || this.ultT > 0) return;
@@ -322,10 +347,19 @@
       if (before < 100 && this.ult >= 100 && this === G.Player) { G.UI.toast(this.cls.ult.name + ' 준비됨 · R', 'gold'); G.Audio.play('chest'); }
     }
     takeDamage(amount, sx, sz) {
-      if (!this.auth || !this.alive || this.invuln > 0 || this.dashT > 0 || (this.ultT > 0 && this.stats.avatar)) return false;
+      if (!this.auth || !this.alive || this.invuln > 0 || this.dashT > 0 || this.leap || (this.ultT > 0 && this.stats.avatar) || G.Classes.immune(this)) return false;
       const s = this.stats;
-      const dmg = amount * (30 / (30 + s.armor)) * G.Game.diffDamage() * G.Classes.takenMult(this);
+      let dmg = amount * (30 / (30 + s.armor)) * G.Game.diffDamage() * G.Classes.takenMult(this, sx, sz, amount);
+      dmg = G.Classes.absorb(this, dmg);
+      if (dmg <= 0.5) {
+        // all of it on the holy shield
+        this.invuln = 0.3;
+        G.FX.burst(this.x, this.y + 1.1, this.z, { count: 8, color: 0xffe6a0, intensity: 2.2, speed: [2, 5], life: [0.15, 0.3], size: [0.3, 0.02] });
+        if (this === G.Player) G.Audio.play('clink');
+        return true;
+      }
       this.hp -= dmg;
+      if (this.hp < 1 && G.Classes.undying(this)) this.hp = 1; // the berserker's frenzy
       this.invuln = 0.55; this.hurtFlash = 1;
       if (this === G.Player) { G.Render.hurt(0.75); G.Render.shake(0.32); G.Audio.play('hurt'); }
       G.FX.dmgNumber(this.x, this.y + 1.8, this.z, '-' + Math.round(dmg), this === G.Player ? 'player' : 'ally');
@@ -338,7 +372,7 @@
           C.damage(t, 18 * s.thorns * s.dmgMult, { canCrit: false, kx: dx / d, kz: dz / d, knock: 7, source: 'thorns', by: this });
         });
       }
-      if (sx !== undefined && this.drive === 'input') {
+      if (sx !== undefined && this.drive === 'input' && this.chan === 0) {
         const dx = this.x - sx, dz = this.z - sz, d = Math.hypot(dx, dz) || 1;
         this.vx += (dx / d) * 9; this.vz += (dz / d) * 9;
       }
@@ -364,19 +398,24 @@
       if (this.aimLine) this.aimLine.visible = false;
       this.charging = false;
       this.firing = false;
+      if (this.chan) this.endChannel(true);
+      this.leap = null;
       this.stopLanceSound();
       this.setOrbitersVisible(false);
       this.lightOff();
     }
-    revive(frac) {
+    // here: stand up where they fell (the cleric's hymn) instead of by the altar
+    revive(frac, here) {
       this.alive = true;
       this.hp = Math.max(1, this.stats.maxHp * frac);
       this.invuln = 2.5;
       this.rv++;
+      this.rvh = here ? 1 : 0;
       const sp = SPAWN[this.slot % SPAWN.length];
-      if (this.drive === 'input') { this.x = sp[0]; this.z = sp[1]; this.vx = this.vz = 0; }
+      if (this.drive === 'input' && !here) { this.x = sp[0]; this.z = sp[1]; this.vx = this.vz = 0; }
       this.group.visible = true;
-      G.Net.vis('pillar', U.r1(this.drive === 'input' ? sp[0] : this.x), U.r1(this.drive === 'input' ? sp[1] : this.z), this.pal.energy);
+      const px = this.drive === 'input' && !here ? sp[0] : this.x, pz = this.drive === 'input' && !here ? sp[1] : this.z;
+      G.Net.vis('pillar', U.r1(px), U.r1(pz), this.pal.energy);
     }
 
     // ---------------- orbiters ----------------
@@ -405,27 +444,30 @@
       for (const d of this.drones) d.mesh.visible = v;
     }
 
-    // ---------------- abilities ----------------
+    // ---------------- basic attack ----------------
+    // returns false when the weapon can't fire yet (the gunslinger reloading)
     fire(extra = 0) {
-      const s = this.stats, c = this.cls, b = c.basic, ult = this.ultT > 0;
-      // ultimates that change the basic attack: the mage's storm (+1 bolt), the hawk eye (+2 seeking
-      // arrows), the inferno avatar (bigger, harder fireballs)
-      const more = ult ? (c.id === 'shard' ? 1 : c.id === 'ranger' ? 2 : 0) : 0;
-      const n = s.projCount + extra + more;
+      const c = this.cls, b = c.basic;
+      if (c.canFire && !c.canFire(this)) return false;
+      if (b.melee) { G.Classes.swing(this); if (this.stats.echo && Math.random() < this.stats.echo) this.echoQ.push(0.12); return true; }
+      const s = this.stats, mod = (c.fireMod && c.fireMod(this)) || NOMOD, shot = (c.onShot && c.onShot(this)) || NOMOD;
+      const n = s.projCount + extra + (mod.more || 0);
       const ox = this.x + Math.cos(this.facing + 0.55) * 0.67, oz = this.z + Math.sin(this.facing + 0.55) * 0.67;
       const base = Math.atan2(this.aimZ - oz, this.aimX - ox);
-      const col = ult && c.id === 'shard' ? 0xffd27a : this.energy;
-      const hot = ult && c.id === 'pyro', spread = b.spread || 0.12;
+      const col = shot.color || mod.color || this.energy, spread = b.spread || 0.12;
       for (let i = 0; i < n; i++) {
         const a = base + (i - (n - 1) / 2) * spread + U.rand(-0.02, 0.02);
-        G.Proj.spawnPlayer({ x: ox, z: oz, y: this.y + 1.4, angle: a, speed: s.projSpeed, life: s.projLife, dmg: s.dmg * s.dmgMult * (hot ? 1.4 : 1),
-          size: s.projSize * (hot ? 1.6 : 1), pierce: s.pierce, ricochet: s.ricochet, homing: s.homing + (ult && c.id === 'ranger' ? 1 : 0),
+        G.Proj.spawnPlayer({ x: ox, z: oz, y: this.y + 1.4, angle: a, speed: s.projSpeed, life: s.projLife, dmg: s.dmg * s.dmgMult * (mod.dmgK || 1) * (shot.dmgK || 1),
+          size: s.projSize * (mod.sizeK || 1), pierce: s.pierce, ricochet: s.ricochet, homing: s.homing + (mod.homing || 0), boom: mod.boom || 0, crit: !!shot.crit,
           knock: b.knock, color: col, source: 'bolt', procs: true, by: this, cos: !this.auth });
       }
       G.FX.burst(ox, this.y + 1.4, oz, { count: 3, color: col, intensity: 2.4, speed: [2, 5], life: [0.08, 0.15], size: [0.28, 0.02], dir: { x: Math.cos(base), y: 0, z: Math.sin(base) }, cone: 0.5 });
-      if (this === G.Player) { G.Audio.play('shoot', { pitch: this.ultT > 0 ? 1.25 : 1 }); G.UI.fireKick(); }
+      if (this === G.Player) { G.Audio.play(b.sfx || 'shoot', { pitch: this.ultT > 0 ? 1.25 : 1 }); G.UI.fireKick(); }
       if (s.echo && Math.random() < s.echo) this.echoQ.push(0.09);
+      return true;
     }
+
+    // ---------------- the shard mage's own skills ----------------
     fireLance(ch) {
       const s = this.stats;
       const width = (1.1 + ch * 1.0) * s.lanceWidth, len = 28, a = this.facing;
@@ -439,7 +481,6 @@
         if (ch > 0.95 && this === G.Player) G.Game.hitstop(0.05);
       }
       if (this.drive === 'input') { this.vx -= Math.cos(a) * (4 + ch * 6); this.vz -= Math.sin(a) * (4 + ch * 6); }
-      this.cd.lance = CD.lance * s.cdMult;
     }
     nova() {
       const s = this.stats;
@@ -451,39 +492,6 @@
           if (t.applyStatus) t.applyStatus('freeze', 1, s.freezeDur);
         });
       }
-      this.cd.nova = CD.nova * s.cdMult * s.novaCdMult;
-    }
-    // ---- the three skills and the ultimate, whatever the character ----
-    // s1 (right click, charged), s2 (Q), s3 (E, at a chosen point). Each class may replace the shard
-    // mage's version; cooldowns come from the class sheet.
-    useS1(ch) {
-      const c = this.cls, s = this.stats;
-      if (c.s1) c.s1(this, ch); else this.fireLance(ch);
-      this.cd.lance = c.skills[0].cd * s.cdMult;
-      this.surge();
-    }
-    useS2() {
-      const c = this.cls, s = this.stats;
-      if (c.s2) c.s2(this); else this.nova();
-      this.cd.nova = c.skills[1].cd * s.cdMult * s.novaCdMult;
-      this.surge();
-    }
-    useS3(tx, tz) {
-      const c = this.cls, s = this.stats, lim = G.World.ARENA_R + 3;
-      tx = U.clamp(tx, -lim, lim); tz = U.clamp(tz, -lim, lim);
-      if (c.s3) c.s3(this, tx, tz); else this.castMeteor(tx, tz);
-      this.cd.meteor = c.skills[2].cd * s.cdMult;
-    }
-    // the shard mage's trait: casting quickens the hand for a moment
-    surge() { if (this.cls.id === 'shard') this.surgeT = 2; }
-    requestMeteor(tx = this.aimX, tz = this.aimZ) {
-      const dx = tx - this.x, dz = tz - this.z, d = Math.hypot(dx, dz);
-      if (d > 22) { tx = this.x + (dx / d) * 22; tz = this.z + (dz / d) * 22; }
-      this.mt = [tx, tz];
-      this.seq.ms++;
-      if (this.auth) this.useS3(tx, tz);
-      else this.cd.meteor = this.cls.skills[2].cd * this.stats.cdMult;
-      this.surge();
     }
     castMeteor(tx, tz) {
       const s = this.stats;
@@ -500,16 +508,41 @@
         if (this === G.Player) G.Game.hitstop(0.06);
         HS.zones.push({ x: tx, z: tz, r: r * 0.75, t: 3, tick: 0, by: this });
       });
-      this.cd.meteor = CD.meteor * s.cdMult;
+    }
+
+    // ---------------- skills, whatever the character ----------------
+    skillCd(i) {
+      const s = this.stats, sk = this.cls.skills[i - 1];
+      return sk.cd * s.cdMult * (i === 2 ? s.novaCdMult : 1);
+    }
+    // run a skill on this machine (the caster's, and the host's for everyone's damage)
+    useSkill(i, a) {
+      const sk = this.cls.skills[i - 1];
+      this.cd[SK[i]] = this.skillCd(i);
+      if (sk.use) sk.use(this, a);
+      if (this.cls.onSkill) this.cls.onSkill(this, i);
+    }
+    // the caster decided: run it here, then count it for the other players (with whatever the
+    // skill worked out, like where a blink landed)
+    castSkill(i, a) {
+      a.q = ++this.seq[SK[i]];
+      this.useSkill(i, a);
+      this.ca[i] = [U.r2(a.ang || 0), U.r1(a.x || 0), U.r1(a.z || 0), U.r2(a.ch || 0)];
+    }
+    startChannel(i) { this.chan = i; this.chanT = 0; G.Classes.chanStart(this, i); }
+    endChannel(cancel) {
+      const i = this.chan;
+      if (!i) return;
+      this.chan = 0;
+      G.Classes.chanEnd(this, i, !!cancel);
+      this.cd[SK[i]] = this.skillCd(i);
     }
     ultStart() {
       const s = this.stats, c = this.cls;
       this.ult = 0;
       this.ultT = (c.ultDur || Hero.ULT_TIME) + (s.avatar ? 2 : 0);
       this.ultTick = 0;
-      if (c.ultStart) { c.ultStart(this); return; }
-      G.Net.vis('ultStart', U.r1(this.x), U.r1(this.z), this.key);
-      C.forEachTarget(this.x, this.z, 8, (t) => C.damage(t, (t.isBoss ? 15 : 30) * s.dmgMult, { kx: t.x - this.x, kz: t.z - this.z, knock: 16, source: 'ult', by: this }));
+      if (c.ultStart) c.ultStart(this);
     }
     startDash(ix, iz) {
       let dx = ix, dz = iz;
@@ -528,7 +561,7 @@
     controlInput(dt) {
       const s = this.stats, m = I.mouse;
       const locked = G.Game.controlsLocked();
-      // phones aim with a thumb stick or auto-aim; desktops aim at the mouse
+      // phones aim with a thumb stick; desktops aim at the mouse
       const T = G.Touch && G.Touch.on ? G.Touch : null;
       let wantFire;
       if (T) wantFire = T.steer(this);
@@ -537,7 +570,7 @@
         this.aimX = _aim.x; this.aimZ = _aim.z;
         wantFire = m.left;
       }
-      this.facing = U.dampAngle(this.facing, Math.atan2(this.aimZ - this.z, this.aimX - this.x), 22, dt);
+      if (!this.leap) this.facing = U.dampAngle(this.facing, Math.atan2(this.aimZ - this.z, this.aimX - this.x), 22, dt);
       let ix = 0, iz = 0;
       if (!locked) {
         if (T) { const k = T.walk(); ix = T.mx * k; iz = T.mz * k; }
@@ -552,8 +585,19 @@
       const il = Math.hypot(ix, iz);
       if (il > 1) { ix /= il; iz /= il; }
       this.moving = il > 0.01;
-      const spd = s.speed * (this.charging ? 0.55 : 1) * (this.ultT > 0 ? 1.15 : 1);
-      if (this.dashT > 0) {
+      this.moveX = ix; this.moveZ = iz;
+      const spd = s.speed * G.Classes.moveK(this);
+      if (this.leap) {
+        // the berserker's jump: straight to the chosen spot, over everything
+        const L = this.leap;
+        L.t += dt;
+        const k = Math.min(1, L.t / L.dur);
+        this.x = U.lerp(L.x0, L.x1, k); this.z = U.lerp(L.z0, L.z1, k);
+        this.hop = Math.sin(k * Math.PI) * 3.2;
+        this.vx = 0; this.vz = 0;
+        if (Math.random() < 0.7) G.FX.trail(this.x + U.rand(-0.4, 0.4), this.y + this.hop + U.rand(0.4, 1.8), this.z + U.rand(-0.4, 0.4), this.energy, 0.55, 0.3, 1.8);
+        if (k >= 1) { this.leap = null; this.hop = 0; }
+      } else if (this.dashT > 0) {
         this.dashT -= dt;
         this.vx = this.dashDir.x * 46; this.vz = this.dashDir.z * 46;
         for (let k = 0; k < 3; k++) G.FX.trail(this.x + U.rand(-0.3, 0.3), this.y + U.rand(0.4, 1.8), this.z + U.rand(-0.3, 0.3), this.energy, 0.55, 0.3, 1.8);
@@ -569,7 +613,7 @@
         this.vx = U.damp(this.vx, ix * spd, 13, dt);
         this.vz = U.damp(this.vz, iz * spd, 13, dt);
       }
-      this.x += this.vx * dt; this.z += this.vz * dt;
+      if (!this.leap) { this.x += this.vx * dt; this.z += this.vz * dt; }
       G.World.resolve(this, 0.55);
       this.y = G.World.heightAt(this.x, this.z);
       if (this.dashCharges < s.dashCharges) {
@@ -580,57 +624,100 @@
       if (locked) {
         this.firing = false;
         if (this.charging) { this.charging = false; this.stopLanceSound(); }
+        if (this.chan) this.endChannel(true);
         if (this.aimLine) this.aimLine.visible = false;
+        if (T) T.drop();
         return;
       }
-      if (I.wasPressed('Space', 'ShiftLeft', 'ShiftRight') && this.dashCharges > 0 && this.dashT <= 0) this.startDash(ix, iz);
-      if (I.wasPressed('KeyQ') && this.cd.nova <= 0) { this.seq.ns++; this.useS2(); }
-      // E lands where you point: the mouse on a desktop, the spot you dragged the button to on a phone
-      if (I.wasPressed('KeyE') && this.cd.meteor <= 0) {
-        const tg = T && T.s3Target;
-        if (tg) { this.requestMeteor(tg.x, tg.z); T.s3Target = null; }
-        else if (!T) this.requestMeteor();
-      }
+      if (I.wasPressed('Space', 'ShiftLeft', 'ShiftRight') && this.dashCharges > 0 && this.dashT <= 0 && !this.leap) this.startDash(ix, iz);
+      if (!this.leap) for (let i = 1; i <= 3; i++) this.skillInput(i, T, m, dt);
       if (I.wasPressed('KeyR') && this.ult >= 100 && this.ultT <= 0 && performance.now() - this.ultReq > 600) {
         this.seq.us++;
         this.ultReq = performance.now();
         if (this.auth) this.ultStart();
       }
-      this.firing = wantFire && !this.charging;
-      const lanceHeld = T ? T.lance : m.right;
-      if (lanceHeld && this.cd.lance <= 0) {
-        if (!this.charging) { this.charging = true; this.lanceCharge = 0; this.lanceSound = G.Audio.loop(); }
-        this.lanceCharge = Math.min(1, this.lanceCharge + dt / 1.1);
-        if (this.lanceSound) this.lanceSound.set(this.lanceCharge);
-        if (Math.random() < 0.6) {
-          const a = Math.random() * U.TAU, ox = this.x + Math.cos(this.facing) * 0.9, oz = this.z + Math.sin(this.facing) * 0.9;
-          const c = new THREE.Color(this.energy);
-          G.FX.P.emit(ox + Math.cos(a) * 1.2, this.y + 1.4, oz + Math.sin(a) * 1.2, -Math.cos(a) * 4, 0, -Math.sin(a) * 4, 0.28, 0.3, 0.05, c.r * 2.4, c.g * 2.4, c.b * 2.4, 1, 0, 0);
+      this.firing = wantFire && !this.charging && !this.chan && !this.leap;
+      this.drawAimLine(T);
+    }
+    // one skill slot: hold, release, or a single press, as its kind wants
+    skillInput(i, T, m, dt) {
+      const sk = this.cls.skills[i - 1], kind = sk.kind, k = SK[i], ready = this.cd[k] <= 0;
+      const held = T ? T.held(i) : i === 1 ? m.right : I.isDown(i === 2 ? 'KeyQ' : 'KeyE');
+      if (kind === 'charge') {
+        if (held && ready && !this.chan && (!this.charging || this.chgSlot === i)) {
+          if (!this.charging) { this.charging = true; this.chgSlot = i; this.lanceCharge = 0; this.lanceSound = G.Audio.loop(); }
+          this.lanceCharge = Math.min(1, this.lanceCharge + dt / (sk.chargeTime || 1.1));
+          if (this.lanceSound) this.lanceSound.set(this.lanceCharge);
+          if (Math.random() < 0.6) {
+            const a = Math.random() * U.TAU, ox = this.x + Math.cos(this.facing) * 0.9, oz = this.z + Math.sin(this.facing) * 0.9;
+            const c = new THREE.Color(this.energy);
+            G.FX.P.emit(ox + Math.cos(a) * 1.2, this.y + 1.4, oz + Math.sin(a) * 1.2, -Math.cos(a) * 4, 0, -Math.sin(a) * 4, 0.28, 0.3, 0.05, c.r * 2.4, c.g * 2.4, c.b * 2.4, 1, 0, 0);
+          }
         }
-      }
-      if (this.charging && (!lanceHeld || this.cd.lance > 0)) {
-        this.charging = false;
-        this.stopLanceSound();
-        if (this.cd.lance <= 0) {
-          // a phone fires exactly where the skill thumb last pointed, not toward the walking thumb
-          const fd = T && T.takeLanceDir();
-          if (fd) this.facing = Math.atan2(fd[1], fd[0]);
-          this.seq.ls++;
-          this.lastLc = this.lanceCharge;
-          this.lastLa = this.facing; // the exact angle travels with the shot, whatever the hero turns to next
-          this.useS1(this.lanceCharge);
+        if (this.charging && this.chgSlot === i && (!held || !ready)) {
+          this.charging = false;
+          this.stopLanceSound();
+          if (ready) {
+            // a phone fires exactly where the skill thumb last pointed, not toward the walking thumb
+            const fd = T && T.takeDir(i);
+            if (fd) this.facing = Math.atan2(fd[1], fd[0]);
+            this.lastLc = this.lanceCharge;
+            this.castSkill(i, { ang: this.facing, x: this.x, z: this.z, ch: this.lanceCharge });
+          }
         }
+        return;
       }
-      if (this.aimLine) {
-        this.aimLine.visible = this.charging;
-        if (this.charging) {
-          const am = this.cls.aim(this.lanceCharge, s);
-          this.aimLine.position.set(this.x, this.y + 0.12, this.z);
-          this.aimLine.rotation.y = -this.facing - Math.PI / 2;
-          this.aimLine.scale.set(am.w, 1, am.len);
-          this.aimLine.material.opacity = 0.15 + this.lanceCharge * 0.35;
-        }
+      if (kind === 'channel') {
+        if (this.chan === i) {
+          this.chanT += dt;
+          if (!held || this.chanT >= (sk.max || 3)) this.endChannel(false);
+        } else if (held && ready && !this.chan && !this.charging) this.startChannel(i);
+        return;
       }
+      // aim / place / self: one press (a phone hands over a finished gesture)
+      let a = null;
+      if (T) { const r = T.take(i); if (r) a = this.touchArgs(sk, r); }
+      else if (i === 1 ? m.rightPressed : I.wasPressed(i === 2 ? 'KeyQ' : 'KeyE')) a = this.mouseArgs(sk);
+      if (!a) return;
+      if (ready && !this.chan && !this.charging) this.castSkill(i, a);
+      else if (!ready && this === G.Player) G.Audio.play('hover');
+    }
+    // the cursor: its direction, or its spot (no further than the skill reaches)
+    mouseArgs(sk) {
+      let ang = Math.atan2(this.aimZ - this.z, this.aimX - this.x), x = this.aimX, z = this.aimZ;
+      if (sk.dir === 'move' && this.moving) ang = Math.atan2(this.moveZ, this.moveX);
+      if (sk.kind === 'self') return { ang: this.facing, x: this.x, z: this.z };
+      const R = sk.range || 20, d = U.dist(this.x, this.z, x, z);
+      if (d > R) { x = this.x + Math.cos(ang) * R; z = this.z + Math.sin(ang) * R; }
+      return { ang, x, z };
+    }
+    // a phone gesture: { x, z } for a spot, { ang, k } for a direction (k: how far the thumb went)
+    touchArgs(sk, r) {
+      if (sk.kind === 'self') return { ang: this.facing, x: this.x, z: this.z };
+      if (sk.kind === 'place') {
+        if (r.x == null) return null;
+        return { ang: Math.atan2(r.z - this.z, r.x - this.x), x: r.x, z: r.z };
+      }
+      let ang = r.ang != null ? r.ang : this.facing;
+      if (sk.dir === 'move' && r.ang == null && this.moving) ang = Math.atan2(this.moveZ, this.moveX);
+      const d = (sk.range || 14) * U.clamp(r.k != null ? r.k : 1, 0.25, 1);
+      return { ang, x: this.x + Math.cos(ang) * d, z: this.z + Math.sin(ang) * d };
+    }
+    // the range line of whatever is being charged, channelled or (on a phone) dragged
+    drawAimLine(T) {
+      if (!this.aimLine) return;
+      let i = this.charging ? this.chgSlot : this.chan;
+      let ang = this.facing;
+      if (!i && T) { const d = T.dragging(); if (d) { i = d.i; ang = Math.atan2(d.dir[1], d.dir[0]); } }
+      const sk = i ? this.cls.skills[i - 1] : null;
+      const show = !!(sk && sk.line);
+      this.aimLine.visible = show;
+      if (!show) return;
+      const am = sk.line(this.charging ? this.lanceCharge : 1, this.stats);
+      this.aimLine.position.set(this.x, this.y + 0.12, this.z);
+      this.aimLine.rotation.y = -ang - Math.PI / 2;
+      this.aimLine.scale.set(am.w, 1, am.len);
+      this.aimLine.material.opacity = this.charging ? 0.15 + this.lanceCharge * 0.35 : 0.22;
     }
     controlNet(dt) {
       const n = this.net;
@@ -645,18 +732,32 @@
       this.facing = U.dampAngle(this.facing, n.f, 16, dt);
       this.aimX = n.ax; this.aimZ = n.az;
       this.charging = !!(n.fl & 2);
+      this.chgSlot = this.charging ? n.cs : 0;
       this.lanceCharge = this.charging ? n.lc : 0;
-      this.firing = !!(n.fl & 1) && !this.charging && !G.Game.controlsLocked();
+      this.stealthVis = !!(n.fl & 8);
+      this.leapVis = !!(n.fl & 16);
+      // a channel starts and stops as the player holds it
+      if (n.chan !== this.chan) {
+        if (this.chan) this.endChannel(false);
+        if (n.chan) this.startChannel(n.chan);
+      }
+      if (this.chan) this.chanT += dt;
+      this.firing = !!(n.fl & 1) && !this.charging && !this.chan && !G.Game.controlsLocked();
       if (n.fl & 4) {
         this.dashT = Math.max(this.dashT, 0.08);
         G.FX.trail(this.x + U.rand(-0.3, 0.3), this.y + U.rand(0.4, 1.8), this.z + U.rand(-0.3, 0.3), this.energy, 0.5, 0.3, 1.8);
       }
       if (!this.auth) return;
+      // the host runs the skills the player cast (once each, as their counters tick up)
       const sn = this.seen;
-      if (sn.ls === undefined) { sn.ls = n.ls; sn.ns = n.ns; sn.ms = n.ms; sn.us = n.us; return; }
-      if (n.ls !== sn.ls) { sn.ls = n.ls; if (this.cd.lance <= 0.4) { this.facing = n.la != null ? n.la : n.f; this.useS1(n.lc); } }
-      if (n.ns !== sn.ns) { sn.ns = n.ns; if (this.cd.nova <= 0.6) this.useS2(); }
-      if (n.ms !== sn.ms) { sn.ms = n.ms; if (this.cd.meteor <= 0.6) { this.useS3(n.mtx, n.mtz); this.surge(); } }
+      for (let i = 1; i <= 3; i++) {
+        const q = n.sq[i], k = SK[i];
+        if (q === sn[k]) continue;
+        sn[k] = q;
+        if (this.cd[k] > 0.6) continue;
+        const ca = n.ca[i];
+        this.useSkill(i, { ang: ca[0], x: ca[1], z: ca[2], ch: ca[3], q });
+      }
       if (n.us !== sn.us) { sn.us = n.us; if (this.ult >= 100 && this.ultT <= 0) this.ultStart(); }
     }
 
@@ -668,49 +769,45 @@
         const sp = SPAWN[this.slot % SPAWN.length];
         this.x = sp[0]; this.z = sp[1]; this.vx = 0; this.vz = 0;
       }
+      // a hero choosing a card is shielded, and nothing of theirs attacks meanwhile
+      const picking = G.Game.isPicking(this);
       this.syncOrbiters();
       if (this.auth) this.maxHp = s.maxHp;
       if (this.drive === 'input') this.controlInput(dt);
       else { this.controlNet(dt); this.dashT = Math.max(0, this.dashT - dt); }
       this.invuln = Math.max(0, this.invuln - dt);
       this.hurtFlash = Math.max(0, this.hurtFlash - dt * 4);
-      for (const k in this.cd) this.cd[k] = Math.max(0, this.cd[k] - dt);
+      const cdk = dt * G.Classes.cdRate(this);
+      for (const k in this.cd) this.cd[k] = Math.max(0, this.cd[k] - cdk);
       if (this.auth && s.regen > 0 && this.hp < s.maxHp) this.hp = Math.min(s.maxHp, this.hp + s.regen * dt);
       if (this === G.Player && this.hp / this.maxHp < 0.3) {
         this.heartT -= dt;
         if (this.heartT <= 0) { this.heartT = 0.9; G.Audio.play('heartbeat'); }
       }
+      G.Classes.timers(this, dt);
+      if (this.chan) G.Classes.channel(this, this.chan, dt);
       this.fireT -= dt;
-      this.surgeT = Math.max(0, this.surgeT - dt);
-      if (this.firing && this.fireT <= 0) { this.fire(); this.fireT = 1 / (s.fireRate * this.rateK()); }
+      if (this.firing && this.fireT <= 0 && this.fire()) this.fireT = 1 / (s.fireRate * this.rateK());
       for (let i = this.echoQ.length - 1; i >= 0; i--) {
         this.echoQ[i] -= dt;
         if (this.echoQ[i] <= 0) { this.echoQ.splice(i, 1); this.fire(); }
       }
-      if (this.auth) { this.updateUlt(dt); this.updateStorm(dt); G.Classes.tick(this, dt); }
-      if (this.ultT > 0 && this.cls.id === 'shard' && Math.random() < 0.5) G.FX.trail(this.x + U.rand(-0.8, 0.8), this.y + U.rand(0.2, 2), this.z + U.rand(-0.8, 0.8), 0xffc35a, 0.5, 0.5, 2.2);
+      if (this.auth) {
+        if (!picking) { this.updateUlt(dt); this.updateStorm(dt); }
+        G.Classes.tick(this, dt);
+      }
       G.Classes.ultLook(this, dt, t);
-      this.updateOrbiters(dt, t);
-      this.animate(dt, t);
+      this.updateOrbiters(dt, t, picking);
+      this.animate(dt, t, picking);
     }
-    // how fast the basic attack fires: the mage's storm and trait, the hawk eye
-    rateK() {
-      const c = this.cls.id, ult = this.ultT > 0;
-      return (ult ? (c === 'shard' ? 1.35 : c === 'ranger' ? 1.8 : 1) : 1) * (this.surgeT > 0 ? 1.4 : 1);
-    }
+    // how fast the basic attack fires: the character's own pace, haste, rage, turrets nearby
+    rateK() { return G.Classes.rateK(this); }
     updateUlt(dt) {
       if (this.ultT <= 0) return;
-      const s = this.stats, c = this.cls;
       this.ultT -= dt;
       this.ultTick -= dt;
       if (this.ultTick > 0) return;
-      if (c.id !== 'shard') { if (c.ultTick) c.ultTick(this); else this.ultTick = 1; return; }
-      this.ultTick = 0.22;
-      const tg = C.nearest(this.x + U.rand(-8, 8), this.z + U.rand(-8, 8), 14);
-      if (!tg) return;
-      G.Net.vis('strike', U.r1(tg.x), U.r1(tg.z), 0xffc35a);
-      // the storm is for crowds: bosses only take half of each strike
-      C.damage(tg, 14 * s.dmgMult * (tg.isBoss ? 0.5 : 1), { canCrit: !tg.isBoss, kx: tg.x - this.x, kz: tg.z - this.z, knock: 4, source: 'ult', cls: 'chain', by: this });
+      if (this.cls.ultTick) this.cls.ultTick(this); else this.ultTick = 1;
     }
     updateStorm(dt) {
       const s = this.stats;
@@ -727,15 +824,17 @@
         C.damage(tg, 35 * s.dmgMult, { canCrit: true, source: 'storm', cls: 'chain', by: this });
       }
     }
-    updateOrbiters(dt, t) {
+    // spinning blades and drones; idle while their hero picks a card
+    updateOrbiters(dt, t, idle) {
       const s = this.stats;
-      this.bladeA += dt * 3.4;
+      this.bladeA += dt * (idle ? 1.2 : 3.4);
       const n = this.blades.length;
       for (let i = 0; i < n; i++) {
         const a = this.bladeA + (i / n) * U.TAU, bx = this.x + Math.cos(a) * 2.7, bz = this.z + Math.sin(a) * 2.7;
         const b = this.blades[i];
         b.position.set(bx, this.y + 1.2, bz);
         b.rotation.set(0, -a, 0);
+        if (idle) continue;
         if (Math.random() < 0.4) G.FX.trail(bx, this.y + 1.2, bz, this.energy, 0.28, 0.14, 1.6);
         if (!this.auth) continue;
         C.forEachTarget(bx, bz, 0.75, (tg) => {
@@ -753,7 +852,7 @@
         d.mesh.position.set(d.x, this.y + 2.5 + Math.sin(t * 3 + i) * 0.2, d.z);
         d.mesh.rotation.y += dt * 3;
         d.t -= dt;
-        if (d.t > 0) continue;
+        if (d.t > 0 || idle) continue;
         const tg = C.nearest(d.x, d.z, 16);
         if (!tg) { d.t = 0.2; continue; }
         d.t = 0.75;
@@ -762,9 +861,14 @@
       }
     }
     lightOff() { if (this.lightSlot) this.lightSlot.light.intensity = 0; }
-    animate(dt, t) {
+    animate(dt, t, picking) {
       const g = this.group;
-      g.position.set(this.x, this.y, this.z);
+      // someone else's jump: an arc while their leap flag is up
+      if (this.drive !== 'input') {
+        this.leapVisT = this.leapVis ? this.leapVisT + dt : 0;
+        this.hop = this.leapVis ? Math.sin(Math.min(1, this.leapVisT / 0.55) * Math.PI) * 3.2 : 0;
+      }
+      g.position.set(this.x, this.y + this.hop, this.z);
       g.rotation.y = -this.facing - Math.PI / 2;
       const sp = Math.hypot(this.vx, this.vz), ms = Math.max(1, this.stats.speed);
       const fwd = (this.vx * Math.cos(this.facing) + this.vz * Math.sin(this.facing)) / ms;
@@ -777,6 +881,7 @@
       this.cape.rotation.x = U.damp(this.cape.rotation.x, 0.15 + Math.min(1, sp / 8) * 0.7 + Math.sin(t * 9) * 0.06 * Math.min(1, sp / 4), 8, dt);
       this.orb.position.set(0.55 + Math.sin(t * 3) * 0.05, 1.2 + Math.sin(t * 4) * 0.08, -0.25);
       this.orb.scale.setScalar(1 + (this.charging ? this.lanceCharge * 0.8 : 0) + Math.sin(t * 8) * 0.05);
+      G.Classes.anim(this, dt, t);
       if (this.lightSlot) {
         const L = this.lightSlot.light;
         L.position.set(this.x, this.y + 1.7, this.z);
@@ -785,30 +890,45 @@
       }
       this.ring.rotation.y += dt * 2;
       this.ringM.opacity = 0.32 + Math.sin(t * 4) * 0.1;
-      const picking = this.alive && G.Game.isPicking(this);
-      this.bubble.visible = picking;
-      if (picking) {
+      const pick = this.alive && picking;
+      this.bubble.visible = pick;
+      if (pick) {
         this.bubble.rotation.y += dt * 0.8;
         this.bubble.scale.setScalar(1 + Math.sin(t * 3) * 0.04);
         this.bubbleM.opacity = 0.18 + Math.sin(t * 5) * 0.05;
       }
+      this.shieldB.visible = this.shieldHp > 0 && !pick;
+      if (this.shieldB.visible) { this.shieldB.rotation.y -= dt * 0.6; this.shieldM.opacity = 0.16 + Math.sin(t * 6) * 0.05; }
+      // the assassin's stealth: see-through (a little more for allies than for yourself)
+      const op = G.Classes.opacity(this);
+      if (op !== this.lastOp) {
+        this.lastOp = op;
+        for (const mt of this.mats) { mt.transparent = op < 1; mt.opacity = op; mt.depthWrite = op >= 1; mt.needsUpdate = true; }
+        this.ring.visible = op >= 1;
+      }
       const hf = this.hurtFlash;
       for (const mt of this.mats) mt.emissive.setRGB(hf * 1.2, hf * 0.15, hf * 0.2);
-      g.visible = !(this.invuln > 0 && this.invuln < 0.5 && this.hurtFlash <= 0 && this.dashT <= 0 && Math.floor(t * 18) % 2 === 0);
+      g.visible = !G.Classes.hidden(this) && !(this.invuln > 0 && this.invuln < 0.5 && this.hurtFlash <= 0 && this.dashT <= 0 && Math.floor(t * 18) % 2 === 0);
     }
 
     // ---------------- co-op sync ----------------
+    // 0 x, 1 z, 2 facing, 3-4 aim, 5 flags, 6 channel slot, 7 charge slot, 8 charge,
+    // 9 s1 count, 10-13 s1 args (angle, x, z, charge), 14 s2 count, 15-18 its args,
+    // 19 s3 count, 20-23 its args, 24 ultimate count
     netState() {
+      const ca = this.ca;
       return [U.r2(this.x), U.r2(this.z), U.r2(this.facing), U.r1(this.aimX), U.r1(this.aimZ),
-        (this.firing ? 1 : 0) | (this.charging ? 2 : 0) | (this.dashT > 0 ? 4 : 0),
-        this.seq.ls, U.r2(this.charging ? this.lanceCharge : this.lastLc), this.seq.ns, this.seq.ms, U.r1(this.mt[0]), U.r1(this.mt[1]), this.seq.us, U.r2(this.lastLa || 0)];
+        (this.firing ? 1 : 0) | (this.charging ? 2 : 0) | (this.dashT > 0 ? 4 : 0) | (this.stealthT > 0 ? 8 : 0) | (this.leap ? 16 : 0),
+        this.chan, this.charging ? this.chgSlot : 0, U.r2(this.charging ? this.lanceCharge : this.lastLc),
+        this.seq.s1, ...ca[1], this.seq.s2, ...ca[2], this.seq.s3, ...ca[3], this.seq.us];
     }
     applyNet(a) {
-      if (!Array.isArray(a) || a.length < 13) return;
+      if (!Array.isArray(a) || a.length < 25) return;
       const N = U.num;
+      const args = (o) => [N(a[o], 0, -10, 10), N(a[o + 1], 0, -140, 140), N(a[o + 2], 0, -140, 140), N(a[o + 3], 0, 0, 1)];
       this.net = { x: N(a[0], this.x, -95, 95), z: N(a[1], this.z, -95, 95), f: N(a[2], 0, -10, 10), ax: N(a[3], 0, -140, 140), az: N(a[4], 0, -140, 140),
-        fl: N(a[5], 0, 0, 7) | 0, ls: N(a[6]), lc: N(a[7], 0, 0, 1), ns: N(a[8]), ms: N(a[9]), mtx: N(a[10], 0, -95, 95), mtz: N(a[11], 0, -95, 95), us: N(a[12]),
-        la: a.length > 13 ? N(a[13], 0, -10, 10) : null };
+        fl: N(a[5], 0, 0, 255) | 0, chan: N(a[6], 0, 0, 3) | 0, cs: N(a[7], 0, 0, 3) | 0, lc: N(a[8], 0, 0, 1),
+        sq: [0, N(a[9]), N(a[14]), N(a[19])], ca: [null, args(10), args(15), args(20)], us: N(a[24]) };
     }
     // replay another player's card picks (in order) so this machine knows their stats
     syncPicks(str) {
@@ -829,7 +949,7 @@
       this.blades = []; this.drones = [];
       for (const g of this.geos) g.dispose();
       for (const m of this.mats) m.dispose();
-      this.glowM.dispose(); this.ringM.dispose(); this.bubbleM.dispose(); this.bladeMat.dispose(); this.droneMat.dispose();
+      this.glowM.dispose(); this.ringM.dispose(); this.bubbleM.dispose(); this.shieldM.dispose(); this.bladeMat.dispose(); this.droneMat.dispose();
       if (this.lightSlot) { this.lightSlot.light.intensity = 0; this.lightSlot.used = false; this.lightSlot = null; }
     }
   }

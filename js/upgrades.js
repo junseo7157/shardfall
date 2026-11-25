@@ -66,11 +66,12 @@
   // the other cards of their tier
   const RARE_PICK = { rapid: 0.3, velocity: 0.3, multishot: 0.3, echo: 0.4 };
   for (const d of defs) d.w = RARE_PICK[d.id] || 1;
-  // skill cards follow the hero's character: the shard mage keeps these names, others get their own skill's
+  // skill cards follow the hero's character: the shard mage keeps these names, others get their own
+  // skill's name and what the card does to it (skills[i].up)
   const SKILL_ALT = {
-    lance: { name: (k) => k.s1 + ' 연마', desc: (k) => `${k.s1} 위력 <b>+45%</b>, 크기 <b>+20%</b>` },
-    glacial: { name: (k) => k.s2 + ' 숙련', desc: (k) => `${k.s2} 대기시간 <b>-15%</b>, 효과 시간 <b>+0.5초</b>` },
-    meteor: { name: (k) => k.s3 + ' 강화', desc: (k) => `${k.s3} 위력 <b>+40%</b>, 범위 <b>+15%</b>` },
+    lance: { name: (c) => c.skills[0].name + ' 연마', desc: (c) => c.skills[0].up || `${c.skills[0].name} 위력 <b>+45%</b>, 크기 <b>+20%</b>` },
+    glacial: { name: (c) => c.skills[1].name + ' 숙련', desc: (c) => c.skills[1].up || `${c.skills[1].name} 대기시간 <b>-15%</b>, 효과 시간 <b>+0.5초</b>` },
+    meteor: { name: (c) => c.skills[2].name + ' 강화', desc: (c) => c.skills[2].up || `${c.skills[2].name} 위력 <b>+40%</b>, 범위 <b>+15%</b>` },
   };
   // offered only when nothing else is left
   const FALLBACK = [
@@ -85,9 +86,17 @@
   ALL.forEach((d, i) => { d.code = CODES[i]; UP.byId[d.id] = d; UP.byCode[d.code] = d; });
 
   UP.level = (hero, id) => (hero.up.levels[id] || 0);
-  const altFor = (d, h) => { const a = SKILL_ALT[d.id], c = h && h.cls; return a && c && c.id !== 'shard' ? { a, k: c.names } : null; };
-  UP.nameOf = (d, h) => { const x = altFor(d, h); return x ? x.a.name(x.k) : d.name; };
-  UP.descOf = (d, lv, h) => { const x = altFor(d, h); return x ? x.a.desc(x.k) : d.desc(lv, h); };
+  // a character can word a card its own way (a melee fighter's "more bolts" widens its swing)
+  const altFor = (d, h) => {
+    const c = h && h.cls;
+    if (!c) return null;
+    const own = c.cardAlt && c.cardAlt[d.id];
+    if (own) return { name: own.name, desc: own.desc };
+    const a = SKILL_ALT[d.id];
+    return a && c.id !== 'shard' ? { name: a.name(c), desc: a.desc(c) } : null;
+  };
+  UP.nameOf = (d, h) => { const x = altFor(d, h); return (x && x.name) || d.name; };
+  UP.descOf = (d, lv, h) => { const x = altFor(d, h); return (x && x.desc) || d.desc(lv, h); };
 
   // tier weights for this hero and this draw (forge luck lifts the upper tiers, chests skip the lower ones)
   UP.tierWeights = function (hero, opts = {}) {
@@ -110,7 +119,9 @@
 
   UP.roll = function (hero, n = 3, opts = {}) {
     const tw = UP.tierWeights(hero, opts);
-    const pool = defs.filter((d) => UP.level(hero, d.id) < d.max && tw[d.rarity] > 0);
+    // cards that do nothing for this character (homing for an axe) never come up
+    const off = (hero.cls && hero.cls.cardOff) || [];
+    const pool = defs.filter((d) => UP.level(hero, d.id) < d.max && tw[d.rarity] > 0 && !off.includes(d.id));
     const out = [];
     while (out.length < n && pool.length) {
       // a tier with nothing left to give drops out and the others share its chance

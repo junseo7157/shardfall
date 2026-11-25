@@ -71,12 +71,14 @@
   };
 
   // o: x, y, z, angle, speed, life, dmg, size, pierce, ricochet, homing, color, source, procs, by (hero), cos (visual only)
+  //    grow (extra damage per metre flown, up to +60%), crit (always crits), mark (seconds), boom (blast radius on hit)
   PR.spawnPlayer = function (o) {
     if (PR.player.length >= MAXP) return;
     PR.player.push({
       x: o.x, y: o.y, z: o.z, vx: Math.cos(o.angle) * o.speed, vz: Math.sin(o.angle) * o.speed, speed: o.speed,
       life: o.life, dmg: o.dmg, size: o.size || 1, pierce: o.pierce || 0, ricochet: o.ricochet || 0, homing: o.homing || 0,
       color: o.color || 0x9fd0ff, source: o.source || 'bolt', procs: !!o.procs, by: o.by || G.Player, cos: !!o.cos, knock: o.knock || 2.2,
+      grow: o.grow || 0, crit: !!o.crit, mark: o.mark || 0, boom: o.boom || 0, dist: 0,
       hit: new Set(), target: null, retarget: 0,
     });
   };
@@ -114,6 +116,7 @@
         }
       }
       const steps = Math.max(1, Math.ceil((b.speed * dt) / 0.6));
+      b.dist += b.speed * dt;
       for (let s = 0; s < steps && !dead; s++) {
         b.x += (b.vx * dt) / steps; b.z += (b.vz * dt) / steps;
         if (W.hitObstacle(b.x, b.z, 0.05)) { G.FX.spark(b.x, b.y, b.z, b.color, 5, 5); dead = true; break; }
@@ -123,7 +126,17 @@
         b.hit.add(hitT);
         // a piercing shot can't run down the wyrm's whole body: one hit per boss
         if (hitT.boss) for (const q of hitT.boss.targets) b.hit.add(q);
-        if (!b.cos) C.damage(hitT, b.dmg, { kx: b.vx / b.speed, kz: b.vz / b.speed, knock: b.knock, source: b.source, procs: b.procs, by: b.by });
+        const kx = b.vx / b.speed, kz = b.vz / b.speed;
+        if (!b.cos) {
+          const dmg = b.dmg * (1 + Math.min(0.6, b.dist * b.grow));
+          C.damage(hitT, dmg, { kx, kz, knock: b.knock, source: b.source, procs: b.procs, by: b.by, crit: b.crit || undefined });
+          if (b.mark && hitT.alive) G.Classes.mark(hitT, b.mark, 1);
+        }
+        // shells and hellfire balls burst where they land
+        if (b.boom > 0) {
+          G.FX.explosion(b.x, b.y - 1, b.z, b.boom, b.color, 0.05);
+          if (!b.cos) C.forEachTarget(b.x, b.z, b.boom, (o) => { if (o !== hitT) C.damage(o, b.dmg * 0.6, { canCrit: false, kx, kz, knock: 5, source: 'explosion', by: b.by }); });
+        }
         G.FX.spark(b.x, b.y, b.z, b.color, 4, 6);
         if (b.pierce > 0) b.pierce--;
         else if (b.ricochet > 0) {
@@ -155,7 +168,9 @@
     let n = 0;
     for (let i = PR.enemy.length - 1; i >= 0; i--) {
       const b = PR.enemy[i];
-      b.life -= dt; b.t += dt;
+      // slowed time (a chronomancer's field or aura, the time stop) slows the shot and its clock
+      const k = (HS.chronoNear(b.x, b.z) ? 0.65 : 1) * G.Classes.shotK(b.x, b.z);
+      b.life -= dt * k; b.t += dt * k;
       let dead = b.life <= 0;
       if (b.accel) {
         b.speed = Math.max(1, b.speed + b.accel * dt);
@@ -170,9 +185,10 @@
           b.vx = Math.cos(a) * b.speed; b.vz = Math.sin(a) * b.speed;
         }
       }
-      const k = HS.chronoNear(b.x, b.z) ? 0.65 : 1;
       b.x += b.vx * dt * k; b.z += b.vz * dt * k;
       if (!dead && W.hitObstacle(b.x, b.z, b.r * 0.5)) { G.FX.spark(b.x, b.y, b.z, b.color, 4, 4); dead = true; }
+      // a guardian's raised shield or dome eats it
+      if (!dead && G.Classes.blockShot(b)) dead = true;
       if (!dead) {
         for (const h of HS.list) {
           if (!h.alive) continue;
@@ -247,6 +263,15 @@
   PR.clearEnemy = function () {
     for (const b of PR.enemy) G.FX.spark(b.x, b.y, b.z, b.color, 3, 3);
     PR.enemy.length = 0;
+  };
+  // the engineer's pulse: enemy shots inside the circle fizzle out
+  PR.clearEnemyIn = function (x, z, r) {
+    for (let i = PR.enemy.length - 1; i >= 0; i--) {
+      const b = PR.enemy[i];
+      if (U.dist2(b.x, b.z, x, z) > r * r) continue;
+      G.FX.spark(b.x, b.y, b.z, 0x8ff4ff, 3, 3);
+      PR.enemy[i] = PR.enemy[PR.enemy.length - 1]; PR.enemy.pop();
+    }
   };
   PR.clear = function () {
     PR.player.length = 0; PR.enemy.length = 0;

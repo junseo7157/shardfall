@@ -9,7 +9,7 @@
   let teamKey = '';
   const tags = new Map();
   const cdLast = {}, cdMax = {};
-  const ARM_MS = 700, COOP_PICK_S = 20;
+  const ARM_MS = 700, COOP_PICK_S = 11;
   const ARCH = 'M10 330V118C10 52 56 10 115 10s105 42 105 108v212z';
   const LOGO = (id) => `<svg viewBox="0 0 660 136" role="img" aria-label="SHARDFALL">
     <defs>
@@ -295,10 +295,11 @@
     UI.clsInfoKey = id;
     const c = G.Classes.get(id), m = G.Mobile.on;
     const keys = m ? ['1번', '2번', '3번', '궁극기'] : ['우클릭', 'Q', 'E', 'R'];
+    const how = (s) => `<i class="how">${G.Classes.HOW[s.kind][m ? 1 : 0]}</i>`;
     $('lobby-cls-info').innerHTML = `<h4>${c.name} <small>${c.role}</small></h4>` +
       `<p class="trait"><b>특성 · ${c.trait.name}</b> ${c.trait.desc}</p>` +
       `<ul><li><kbd>${m ? '오른쪽' : '좌클릭'}</kbd><b>${c.basic.name}</b>${c.basic.desc}</li>` +
-      c.skills.map((s, i) => `<li><kbd>${keys[i]}</kbd><b>${s.name}</b>${s.desc}</li>`).join('') +
+      c.skills.map((s, i) => `<li><kbd>${keys[i]}</kbd><b>${s.name}</b>${how(s)}${s.desc}</li>`).join('') +
       `<li><kbd>${keys[3]}</kbd><b>${c.ult.name}</b>${c.ult.desc}</li></ul>`;
   }
 
@@ -368,11 +369,22 @@
     E.timer.textContent = U.fmtTime(Gm.time);
     E.kills.textContent = Gm.stats.kills;
 
-    setCd('rmb', P.cd.lance, P.charging);
-    setCd('q', P.cd.nova);
-    setCd('e', P.cd.meteor);
-    E.ab.rmb.charge.style.width = (P.charging ? P.lanceCharge * 100 : 0) + '%';
-    E.ab.lmb.el.classList.toggle('active', m.left && P.alive);
+    // the three skills: cooldown, and a bar while one is charged or held
+    ['rmb', 'q', 'e'].forEach((k, j) => {
+      const i = j + 1, sk = P.cls.skills[j], charging = P.charging && P.chgSlot === i, chan = P.chan === i;
+      setCd(k, P.cd['s' + i], charging || chan);
+      const bar = E.ab[k].charge;
+      if (bar) bar.style.width = (charging ? P.lanceCharge * 100 : chan ? (1 - P.chanT / (sk.max || 3)) * 100 : 0) + '%';
+    });
+    const lm = E.ab.lmb;
+    lm.el.classList.toggle('active', m.left && P.alive);
+    // the gunslinger's six rounds, and a reload
+    if (P.cls.ammo) {
+      if (lm.pips.children.length !== P.cls.ammo) lm.pips.innerHTML = '<i></i>'.repeat(P.cls.ammo);
+      [...lm.pips.children].forEach((p, i) => p.classList.toggle('on', i < P.ammo));
+      lm.txt.textContent = P.reloadT > 0 ? P.reloadT.toFixed(1) : '';
+      lm.cd.style.setProperty('--cd', P.reloadT > 0 ? 1 : 0);
+    } else if (lm.pips.childElementCount) { lm.pips.innerHTML = ''; lm.txt.textContent = ''; lm.cd.style.setProperty('--cd', 0); }
     const d = E.ab.dash;
     if (d.pips.children.length !== s.dashCharges) d.pips.innerHTML = '<i></i>'.repeat(s.dashCharges);
     [...d.pips.children].forEach((p, i) => p.classList.toggle('on', i < P.dashCharges));

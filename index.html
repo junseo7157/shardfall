@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700;800;900&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=8">
+<link rel="stylesheet" href="css/style.css?v=9">
 <script type="importmap">
 {
   "imports": {
@@ -57,11 +57,11 @@
   </div>
 
   <div id="abilities">
-    <div class="ab" id="ab-lmb" data-icon="shard"><div class="ab-icon"></div><div class="ab-cd"></div><span class="ab-cdtext"></span><div class="ab-key">좌클릭</div></div>
+    <div class="ab" id="ab-lmb" data-icon="shard"><div class="ab-icon"></div><div class="ab-cd"></div><span class="ab-cdtext"></span><div class="ab-pips ammo"></div><div class="ab-key">좌클릭</div></div>
     <div class="ab" id="ab-rmb" data-icon="spear"><div class="ab-icon"></div><div class="ab-cd"></div><span class="ab-cdtext"></span><div class="ab-charge"><div></div></div><div class="ab-key">우클릭</div></div>
     <div class="ab" id="ab-dash" data-icon="dash"><div class="ab-icon"></div><div class="ab-cd"></div><span class="ab-cdtext"></span><div class="ab-pips"></div><div class="ab-key">Space/Shift</div></div>
-    <div class="ab" id="ab-q" data-icon="snow"><div class="ab-icon"></div><div class="ab-cd"></div><span class="ab-cdtext"></span><div class="ab-key">Q</div></div>
-    <div class="ab" id="ab-e" data-icon="meteor"><div class="ab-icon"></div><div class="ab-cd"></div><span class="ab-cdtext"></span><div class="ab-key">E</div></div>
+    <div class="ab" id="ab-q" data-icon="snow"><div class="ab-icon"></div><div class="ab-cd"></div><span class="ab-cdtext"></span><div class="ab-charge"><div></div></div><div class="ab-key">Q</div></div>
+    <div class="ab" id="ab-e" data-icon="meteor"><div class="ab-icon"></div><div class="ab-cd"></div><span class="ab-cdtext"></span><div class="ab-charge"><div></div></div><div class="ab-key">E</div></div>
     <div class="ab ult" id="ab-r" data-icon="burst"><div class="ab-icon"></div><div class="ab-cd"></div><span class="ab-cdtext"></span><div class="ab-key">R</div></div>
   </div>
 
@@ -164,21 +164,23 @@
       <div class="help-grid touch-only">
         <div><kbd>왼쪽 엄지</kbd><span>닿은 자리에 생기는 막대로 이동. 살짝 밀면 걷고 끝까지 밀면 달림</span></div>
         <div><kbd>오른쪽 끌기</kbd><span>끄는 방향으로 조준하며 연사. 손을 떼면 멈춤</span></div>
-        <div><kbd>1번 스킬</kbd><span>(파편 창 등) 누르고 있으면 모이고, 버튼을 끈 방향으로 떼는 순간 발사</span></div>
+        <div><kbd>◉ 모으기</kbd><span>(파편 창, 저격 화살) 누르고 있으면 모이고, 버튼을 끈 방향으로 떼는 순간 발사</span></div>
+        <div><kbd>◎ 유지</kbd><span>(방패 세우기, 화염 방사 등) 누르고 있는 동안 계속. 버튼을 끌면 그쪽으로</span></div>
+        <div><kbd>➚ 방향</kbd><span>(방패 던지기, 그림자 걸음 등) 버튼을 끌어 방향을 정하고 떼면 시전. 톡 누르면 보는 쪽으로</span></div>
+        <div><kbd>⊙ 자리</kbd><span>(운석, 포탑 등) 버튼을 끌면 바닥에 자리가 보이고, 손을 떼면 그곳에 시전</span></div>
         <div><kbd>질주</kbd><span>움직이는 방향으로 돌진. 질주하는 동안은 맞지 않음</span></div>
-        <div><kbd>2번 스킬</kbd><span>(서리 노바 등) 누르면 바로 시전</span></div>
-        <div><kbd>3번 스킬</kbd><span>(운석 등) 버튼을 끌면 바닥에 떨어질 자리가 보이고, 손을 떼면 그곳에 시전. 끌지 않고 떼면 취소</span></div>
-        <div><kbd>궁극기</kbd><span>적을 쓰러뜨려 모으는 궁극기. 가득 차면 버튼이 빛남</span></div>
+        <div><kbd>궁극기</kbd><span>적을 쓰러뜨려 천천히 모으는 궁극기. 가득 차면 버튼이 빛남</span></div>
       </div>
       <div class="help-grid pc-only">
         <div><kbd>W A S D</kbd><span>이동</span></div>
         <div><kbd>마우스</kbd><span>조준</span></div>
         <div><kbd>좌클릭 누르기</kbd><span>파편탄 연사</span></div>
-        <div><kbd>우클릭 모으기</kbd><span>파편 창. 오래 모을수록 굵고 아픈 관통 광선</span></div>
+        <div><kbd>우클릭</kbd><span>1번 스킬. 파편술사는 모았다가 놓는 파편 창</span></div>
         <div><kbd>Space / Shift</kbd><span>질주. 질주하는 동안은 맞지 않음</span></div>
-        <div><kbd>Q</kbd><span>서리 노바. 주변 적을 얼리고 밀어냄</span></div>
-        <div><kbd>E</kbd><span>운석. 커서 자리에 떨어져 불바다를 남김</span></div>
-        <div><kbd>R</kbd><span>파편 폭풍. 적을 쓰러뜨려 모으는 궁극기</span></div>
+        <div><kbd>Q</kbd><span>2번 스킬. 파편술사는 주변을 얼리는 서리 노바</span></div>
+        <div><kbd>E</kbd><span>3번 스킬. 파편술사는 커서 자리에 떨어지는 운석</span></div>
+        <div><kbd>R</kbd><span>궁극기. 적을 쓰러뜨려 천천히 모음</span></div>
+        <div><kbd>누르고 있기</kbd><span>같이 하기 캐릭터의 '누르고 있는 동안' 스킬은 키를 누르는 동안 이어짐</span></div>
         <div><kbd>1 2 3</kbd><span>카드 고르기. <kbd>F</kbd> 다시 뽑기</span></div>
         <div><kbd>Esc</kbd><span>일시정지</span></div>
       </div>
@@ -194,7 +196,9 @@
         <li>5스테이지마다 보스가 나오고, 15스테이지를 넘기면 승리합니다.</li>
         <li>같이 하면 사람 수만큼 섬이 넓어지고 적이 많아지며, 적과 보스도 더 단단하고 아프게 칩니다. 대기실에서 배율을 볼 수 있어요.</li>
         <li>같이 하기는 2명부터 시작합니다. 경험치와 레벨은 팀이 함께 쌓고, 레벨이 오르거나 누가 상자를 열면 모두 카드를 한 장씩 각자 고릅니다.</li>
-        <li>같이 하기에서는 대기실에서 캐릭터를 고릅니다(파편술사·수호기사·매사냥꾼·화염술사·빛의 사제, 겹치지 않게). 캐릭터마다 스킬 3개와 궁극기, 고유 특성이 다릅니다. 위의 키 설명은 파편술사 기준입니다.</li>
+        <li>같이 하기에서는 대기실에서 캐릭터 10명 중 하나를 겹치지 않게 고릅니다: 파편술사·수호기사·매사냥꾼·화염술사·빛의 사제·광전사·기계공·그림자 암살자·시간술사·총잡이. 캐릭터마다 특성, 기본 공격, 스킬 3개와 궁극기, 쓰는 방법이 모두 다릅니다. 대기실에서 캐릭터 위에 올리면 설명이 보여요.</li>
+        <li>같이 하기에서 카드를 고르는 11초 동안은 보호막으로 무적이지만, 그동안은 드론·칼날·포탑·매처럼 저절로 공격하는 것도 멈춥니다.</li>
+        <li>스테이지가 오를수록 일반 몬스터가 점점 단단하고 빠르고 아파집니다.</li>
         <li>같이 하다 쓰러지면 남은 동료가 그 스테이지를 깨는 순간 다시 일어납니다. 모두 쓰러지면 실패입니다.</li>
       </ul>
       <button class="btn ghost" id="btn-help-back">돌아가기</button>
@@ -299,7 +303,7 @@ try {
     ShaderPass: sp.ShaderPass, OutputPass: op.OutputPass, mergeGeometries: bgu.mergeGeometries,
   };
   const files = ['core', 'render', 'world', 'fx', 'audio', 'vis', 'icons', 'upgrades', 'hero', 'classes', 'projectiles', 'enemies', 'bosses', 'pickups', 'net', 'ui', 'touch', 'game'];
-  const BUILD = ['localhost', '127.0.0.1'].includes(location.hostname) ? String(Date.now()) : '13';
+  const BUILD = ['localhost', '127.0.0.1'].includes(location.hostname) ? String(Date.now()) : '14';
   for (let i = 0; i < files.length; i++) {
     setStatus('게임 데이터 받는 중 · ' + files[i]);
     await loadScript('js/' + files[i] + '.js?v=' + BUILD);

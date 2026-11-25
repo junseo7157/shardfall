@@ -71,7 +71,7 @@
   // states where the body is committed to a direction
   const LOCKED = new Set(['crouch', 'leap', 'brace', 'bash', 'aim']);
   // light shots a shield stops from the front
-  const BLOCKABLE = new Set(['bolt', 'drone', 'blade']);
+  const BLOCKABLE = new Set(['bolt', 'drone', 'blade', 'turret']);
 
   // ---------- rigs ----------
   const RIG_DEFS = {
@@ -282,8 +282,12 @@
       this.maxHp = this.hp = T.hp * E.hpScale * (this.elite ? 3.6 : 1);
       this.r = T.r * (this.elite ? 1.3 : 1);
       this.h = T.h * this.scale;
-      this.speed = T.speed * (this.affix === 'swift' ? 1.4 : 1) * U.rand(0.92, 1.08);
-      this.dmg = T.dmg * (this.elite ? 1.4 : 1);
+      // later stages field faster, harder-hitting monsters (bosses scale on their own)
+      this.speed = T.speed * (this.affix === 'swift' ? 1.4 : 1) * U.rand(0.92, 1.08) * E.speedScale;
+      this.dmg = T.dmg * (this.elite ? 1.4 : 1) * E.dmgScale;
+      this.uid = ++E.uidN;
+      this.fear = 0; this.fearX = 0; this.fearZ = 0; this.root = 0; this.pull = null;
+      this.dMark = null; this.markUntil = 0; this.markSent = 0;
       this.mass = T.mass * (this.elite ? 2 : 1);
       this.alive = true; this.spawnT = o.instant ? 0.15 : 0.75; this.spawnMax = 0.75;
       this.vx = 0; this.vz = 0; this.kvx = 0; this.kvz = 0;
@@ -335,9 +339,32 @@
       const d = Math.hypot(dx, dz) || 1;
       this.kvx += (dx / d) * f / this.mass; this.kvz += (dz / d) * f / this.mass;
     }
+    // the berserker's war cry: run from (x, z) for a while
+    scare(x, z, d) {
+      if (this.proxy || !this.alive) return;
+      this.fear = Math.max(this.fear, d * (this.elite || this.type === 'brute' ? 0.6 : 1));
+      this.fearX = x; this.fearZ = z;
+      if (this.tele) { this.tele.kill(); this.tele = null; }
+      this.state = 'move'; this.hop = 0;
+    }
+    // the falconer's snare: stuck to the spot, still able to swing
+    rootFor(d) { if (!this.proxy && this.alive) this.root = Math.max(this.root, d * (this.elite ? 0.6 : 1)); }
+    // the gunslinger's lasso: dragged to (x, z)
+    pullTo(x, z) {
+      if (this.proxy || !this.alive) return;
+      this.pull = { x, z, t: 0.45 };
+      if (this.tele) { this.tele.kill(); this.tele = null; }
+      this.state = 'move'; this.hop = 0;
+    }
   }
 
-  const E = (G.Enemies = { list: [], TYPES, AFFIX, TYPE_KEYS, AFFIX_KEYS, STATE_KEYS, hpScale: 1, grid: new G.Grid(160, 4), nextId: 0 });
+  const E = (G.Enemies = { list: [], TYPES, AFFIX, TYPE_KEYS, AFFIX_KEYS, STATE_KEYS, hpScale: 1, dmgScale: 1, speedScale: 1, uidN: 0, grid: new G.Grid(160, 4), nextId: 0 });
+  // an enemy by its co-op id (the host's monster or a client's copy of it)
+  E.byId = function (id) {
+    if (proxies.size) return proxies.get(id) || null;
+    for (const e of E.list) if (e.id === id && e.alive) return e;
+    return null;
+  };
   const rigs = {};
   const pool = [];
   const proxies = new Map();
@@ -386,7 +413,7 @@
       G.Net.tele({ shape: 'circle', x, z, r: 3.6, dur: 0.9, color: 0xffa020 });
       E.later(0.9, () => {
         G.Net.vis('boom', U.r1(x), U.r1(z), 3.6, 0xffa020, 0.3);
-        G.Heroes.damageCircle(x, z, 3.6, 22);
+        G.Heroes.damageCircle(x, z, 3.6, 22 * E.dmgScale);
       });
     }
     G.Game.onKill(e);
@@ -511,12 +538,16 @@
     return _fd;
   }
   function pickTarget(e, dt) {
+    // a guardian's banner close by draws every eye; a hero in the shadows can't be seen
+    const dc = G.Classes.decoyFor(e.x, e.z);
+    if (dc) { e.target = dc; e.tgT = 0.3; return dc; }
     e.tgT -= dt;
-    if (e.tgT > 0 && e.target && e.target.alive) return e.target;
+    const tg = e.target;
+    if (e.tgT > 0 && tg && tg.alive && !tg.isDecoy && !(tg.stealthT > 0) && !G.Classes.immune(tg)) return tg;
     e.tgT = 0.4 + Math.random() * 0.3;
     let best = null, bd = 1e12;
     for (const h of G.Heroes.list) {
-      if (!h.alive) continue;
+      if (!h.alive || h.stealthT > 0 || G.Classes.immune(h)) continue;
       let d = U.dist2(e.x, e.z, h.x, h.z);
       if (h === e.target) d *= 0.7;
       if (d < bd) { bd = d; best = h; }
@@ -550,6 +581,17 @@
     let frozen = false;
     if (e.freeze > 0) { e.freeze -= dt; frozen = true; if (Math.random() < 0.1) G.FX.spark(e.x, e.y + e.h * 0.6, e.z, 0xbff0ff, 1, 2); }
 
+    // dragged by a lasso: nothing else until it lands
+    if (e.pull) {
+      const p = e.pull, ddx = p.x - e.x, ddz = p.z - e.z, d = Math.hypot(ddx, ddz), st = 30 * dt;
+      p.t -= dt;
+      if (d <= st || p.t <= 0) { if (d <= st) { e.x = p.x; e.z = p.z; } e.pull = null; }
+      else { e.x += (ddx / d) * st; e.z += (ddz / d) * st; }
+      e.vx = 0; e.vz = 0;
+      if (Math.random() < 0.5) G.FX.trail(e.x, e.y + 1, e.z, 0xd8b078, 0.4, 0.2, 1.6);
+      return;
+    }
+    if (e.root > 0) e.root -= dt;
     const P = pickTarget(e, dt);
     let mx = 0, mz = 0;
     const ty = e.type;
@@ -558,8 +600,19 @@
       dx = P.x - e.x; dz = P.z - e.z; dist = Math.hypot(dx, dz) || 0.001;
       nx = dx / dist; nz = dz / dist;
     }
-    let sp = e.speed * (1 - e.slowK);
+    let sp = e.speed * (1 - e.slowK) * G.Classes.enemyK(e.x, e.z);
     if (G.Heroes.chronoNear(e.x, e.z)) sp *= 0.65;
+    // frightened by a war cry: run, don't fight
+    if (e.fear > 0 && !frozen) {
+      e.fear -= dt;
+      const fx = e.x - e.fearX, fz = e.z - e.fearZ, fd = Math.hypot(fx, fz) || 1;
+      e.vx = U.damp(e.vx, (fx / fd) * sp * 1.1, 6, dt); e.vz = U.damp(e.vz, (fz / fd) * sp * 1.1, 6, dt);
+      e.x += e.vx * dt; e.z += e.vz * dt;
+      e.moveAmt = 1;
+      e.facing = U.dampAngle(e.facing, Math.atan2(fz, fx), 10, dt);
+      if (Math.random() < 0.08) G.FX.spark(e.x, e.y + e.h + 0.3, e.z, 0xff7a4a, 2, 2);
+      return;
+    }
     if (!frozen && P) {
       if (e.state === 'move') {
         const band = RANGED[ty];
@@ -696,7 +749,7 @@
         }
       }
     }
-    if (frozen || e.state !== 'move' || !P) { mx = 0; mz = 0; }
+    if (frozen || e.state !== 'move' || !P || e.root > 0) { mx = 0; mz = 0; }
     e.vx = U.damp(e.vx, mx * sp, 6, dt); e.vz = U.damp(e.vz, mz * sp, 6, dt);
     e.kvx = U.damp(e.kvx, 0, 6, dt); e.kvz = U.damp(e.kvz, 0, 6, dt);
     e.x += (e.vx + e.kvx) * dt; e.z += (e.vz + e.kvz) * dt;
