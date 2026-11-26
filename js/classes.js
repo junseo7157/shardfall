@@ -535,7 +535,7 @@
   // ---------- 6. berserker: the more it bleeds, the harder it hits ----------
   def({
     id: 'berserker', tier: 1, name: '광전사', role: '피를 볼수록 강해지는 근접 전사', emblem: 'axe', css: '#e0765a', energy: 0xff5a3a, ultDur: 7, orb: false, size: 1.06,
-    trait: { name: '피의 갈증', desc: '잃은 체력만큼 피해와 공격 속도가 최대 50% 늘고, 근접 공격 피해의 8%만큼 체력을 회복합니다.' },
+    trait: { name: '피의 갈증', desc: '잃은 체력만큼 피해와 공격 속도가 최대 50% 늘고, 근접 공격 피해의 6%만큼 체력을 회복합니다.' },
     basic: { name: '쌍도끼', icon: 'axe', desc: '앞쪽을 빠르게 베어 가르는 근접 연타', melee: { r: 3.0, arc: 2.3 }, knock: 4, sfx: 'swing' },
     stats(s) { s.maxHp = 140; s.armor += 2; s.speed *= 1.02; s.dmg = 21; s.fireRate = 2.6; s.crit += 0.05; },
     cardOff: MELEE_OFF, cardAlt: MELEE_ALT,
@@ -576,7 +576,7 @@
           });
         } },
     ],
-    ult: { name: '피의 광란', icon: 'drop', desc: '7초 동안 쓰러지지 않고(체력 1 아래로 안 내려감) 공격 속도 +60%, 공격 피해의 25%만큼 흡혈. 처치할 때마다 0.5초 연장' },
+    ult: { name: '피의 광란', icon: 'drop', desc: '7초 동안 쓰러지지 않고(체력 1 아래로 안 내려감) 공격 속도 +60%, 공격 피해의 20%만큼 흡혈. 처치할 때마다 0.5초 연장' },
     rateK: (h) => (1 + 0.5 * lost(h)) * (h.ultT > 0 ? 1.6 : 1),
     channel(h, i, dt) {
       const s = h.stats, r = 3.6 * (0.9 + 0.1 * s.lanceWidth);
@@ -1127,7 +1127,8 @@
     if (t.dMark && !killed) t.dMark.acc += dealt;
     if (id === 'ranger' && crit && !killed) markEnemy(t, 4, 1);
     else if (id === 'chrono' && o.source === 'bolt' && !killed) slow(t, 0.3, 1.5);
-    else if (id === 'berserker' && (o.source === 'melee' || o.source === 'whirl')) h.heal(dealt * (h.ultT > 0 ? 0.25 : 0.08), true);
+    // the berserker drinks 6% of its melee damage (20% in its frenzy); trimmed from 8% / 25% on request
+    else if (id === 'berserker' && (o.source === 'melee' || o.source === 'whirl')) h.heal(dealt * (h.ultT > 0 ? 0.2 : 0.06), true);
   };
   CL.onKill = function (e) {
     const h = e.lastBy;

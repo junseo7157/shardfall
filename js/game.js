@@ -23,8 +23,9 @@
     12: ['치유사', '주변 적을 되살립니다. 먼저 쓰러뜨리세요'],
   };
   // difficulty: k scales enemy and boss health and the damage they deal; rw scales score and soul shards.
-  // Every tier sits 1.7x below the original tuning (BASE); the tiers keep their ratios to normal.
-  const BASE = 1 / 1.7;
+  // Every tier was lowered 1.7x from the original tuning and then raised 1.2x (BASE); the tiers
+  // keep their ratios to normal.
+  const BASE = 1.2 / 1.7;
   const DIFFS = {
     easy: { name: '쉬움', k: BASE / 1.7, rw: 0.6, css: 'var(--emerald-l)' },
     normal: { name: '보통', k: BASE, rw: 1, css: 'var(--cobalt-l)' },
