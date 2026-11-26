@@ -787,7 +787,9 @@
       G.Classes.timers(this, dt);
       if (this.chan) G.Classes.channel(this, this.chan, dt);
       this.fireT -= dt;
-      if (this.firing && this.fireT <= 0 && this.fire()) this.fireT = 1 / (s.fireRate * this.rateK());
+      // someone else's gunslinger shoots when its owner's rounds run down (see syncAmmo), not on the trigger flag
+      const byTrigger = !(this.drive !== 'input' && this.cls.remoteFire && this.net && this.net.am >= 0);
+      if (byTrigger && this.firing && this.fireT <= 0 && this.fire()) this.fireT = 1 / (s.fireRate * this.rateK());
       for (let i = this.echoQ.length - 1; i >= 0; i--) {
         this.echoQ[i] -= dt;
         if (this.echoQ[i] <= 0) { this.echoQ.splice(i, 1); this.fire(); }
@@ -914,13 +916,13 @@
     // ---------------- co-op sync ----------------
     // 0 x, 1 z, 2 facing, 3-4 aim, 5 flags, 6 channel slot, 7 charge slot, 8 charge,
     // 9 s1 count, 10-13 s1 args (angle, x, z, charge), 14 s2 count, 15-18 its args,
-    // 19 s3 count, 20-23 its args, 24 ultimate count
+    // 19 s3 count, 20-23 its args, 24 ultimate count, 25 the gun's cylinder (gunslinger)
     netState() {
       const ca = this.ca;
       return [U.r2(this.x), U.r2(this.z), U.r2(this.facing), U.r1(this.aimX), U.r1(this.aimZ),
         (this.firing ? 1 : 0) | (this.charging ? 2 : 0) | (this.dashT > 0 ? 4 : 0) | (this.stealthT > 0 ? 8 : 0) | (this.leap ? 16 : 0),
         this.chan, this.charging ? this.chgSlot : 0, U.r2(this.charging ? this.lanceCharge : this.lastLc),
-        this.seq.s1, ...ca[1], this.seq.s2, ...ca[2], this.seq.s3, ...ca[3], this.seq.us];
+        this.seq.s1, ...ca[1], this.seq.s2, ...ca[2], this.seq.s3, ...ca[3], this.seq.us, this.cls.netAmmo ? this.cls.netAmmo(this) : 0];
     }
     applyNet(a) {
       if (!Array.isArray(a) || a.length < 25) return;
@@ -928,7 +930,9 @@
       const args = (o) => [N(a[o], 0, -10, 10), N(a[o + 1], 0, -140, 140), N(a[o + 2], 0, -140, 140), N(a[o + 3], 0, 0, 1)];
       this.net = { x: N(a[0], this.x, -95, 95), z: N(a[1], this.z, -95, 95), f: N(a[2], 0, -10, 10), ax: N(a[3], 0, -140, 140), az: N(a[4], 0, -140, 140),
         fl: N(a[5], 0, 0, 255) | 0, chan: N(a[6], 0, 0, 3) | 0, cs: N(a[7], 0, 0, 3) | 0, lc: N(a[8], 0, 0, 1),
-        sq: [0, N(a[9]), N(a[14]), N(a[19])], ca: [null, args(10), args(15), args(20)], us: N(a[24]) };
+        sq: [0, N(a[9]), N(a[14]), N(a[19])], ca: [null, args(10), args(15), args(20)], us: N(a[24]), am: a.length > 25 ? N(a[25], 0, 0, 15) | 0 : -1 };
+      // a gun that counts its rounds: fire here exactly the rounds its owner just fired
+      if (this.cls.syncAmmo && this.net.am >= 0) this.cls.syncAmmo(this, this.net.am);
     }
     // replay another player's card picks (in order) so this machine knows their stats
     syncPicks(str) {

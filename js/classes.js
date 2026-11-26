@@ -902,7 +902,7 @@
   def({
     id: 'gunslinger', tier: 2, name: '총잡이', role: '여섯 발로 승부하는 무법자', emblem: 'gun', css: '#e8c07a', energy: 0xffc46a, ultDur: 2.5, orb: false, ammo: 6,
     trait: { name: '마지막 한 발', desc: '탄창의 마지막 한 발은 피해 2배에 반드시 치명타. 재장전이 끝나면 1.5초 동안 이동 속도 +20%.' },
-    basic: { name: '리볼버', icon: 'gun', desc: '여섯 발을 쏘고 재장전(약 1.1초)', spread: 0.05, sfx: 'gun' },
+    basic: { name: '리볼버', icon: 'gun', desc: '여섯 발을 다 쏘면 재장전(약 1.1초). 남은 탄은 저절로 채워지지 않음', spread: 0.05, sfx: 'gun' },
     stats(s) { s.maxHp = 100; s.speed *= 1.05; s.dmg = 26; s.fireRate = 5.2; s.projSpeed = 64; s.projLife = 0.5; s.projSize = 0.8; s.crit += 0.08; },
     skills: [
       { name: '패닝', icon: 'fan', kind: 'aim', cd: 6, line: () => ({ len: 20, w: 7 }),
@@ -943,21 +943,38 @@
     canFire: (h) => !(h.reloadT > 0),
     onShot(h) {
       h.ammo = Math.max(0, (h.ammo == null ? 6 : h.ammo) - 1);
-      h.idleT = 0;
       if (h.ammo > 0) return null;
       h.reloadT = reloadTime(h);
       if (h === G.Player) G.Audio.play('reloadStart');
       return { dmgK: 2, crit: true, color: 0xffffff };
     },
+    // the gun reloads only once the cylinder is empty (rolling and fanning refill it on purpose);
+    // rounds left over stay where they are, however long you wait
     timers(h, dt) {
-      if (h.reloadT > 0) {
-        h.reloadT -= dt;
-        if (h.reloadT <= 0) { h.reloadT = 0; h.ammo = 6; h.speedT = 1.5; if (h === G.Player) G.Audio.play('reload'); }
-      } else if (!h.firing && h.ammo < 6) {
-        // stop shooting for a moment and the gun fills itself
-        h.idleT = (h.idleT || 0) + dt;
-        if (h.idleT > 1.4) { h.idleT = 0; h.reloadT = reloadTime(h) * 0.8; }
+      if (!(h.reloadT > 0)) return;
+      h.reloadT -= dt;
+      if (h.reloadT <= 0) { h.reloadT = 0; h.ammo = 6; h.speedT = 1.5; if (h === G.Player) G.Audio.play('reload'); }
+    },
+    // Co-op: another machine's copy of this gun fires exactly the rounds its owner fired. The owner
+    // reports its cylinder (am = rounds left, +8 while reloading); every round that disappears
+    // since the last report is one shot, and the one that empties it is the big last round.
+    // A refill (reload done, a roll, fanning) is not a shot. hero.js never fires such a copy from
+    // the trigger flag (remoteFire).
+    remoteFire: true,
+    netAmmo: (h) => (h.ammo | 0) + (h.reloadT > 0 ? 8 : 0),
+    syncAmmo(h, am) {
+      const ammo = Math.min(6, am & 7), reloading = !!(am & 8);
+      const prev = h.netAmmo == null ? ammo : h.netAmmo;
+      h.netAmmo = ammo;
+      if (ammo < prev && h.alive) {
+        h.ammo = prev; h.reloadT = 0;
+        if (h.net) { h.aimX = h.net.ax; h.aimZ = h.net.az; }
+        for (let i = prev - ammo; i > 0; i--) h.fire();
+        h.echoQ.length = 0; // its owner's echoes arrive as rounds of their own
       }
+      h.ammo = ammo;
+      if (reloading) { if (!(h.reloadT > 0)) h.reloadT = reloadTime(h); }
+      else h.reloadT = 0;
     },
     ultStart(h) {
       G.Net.vis('ultFx', 'gunslinger', R1(h.x), R1(h.z), h.key);
@@ -1023,7 +1040,7 @@
   CL.resetHero = function (h) {
     h.stealthT = 0; h.hasteT = 0; h.rageT = 0; h.critNextT = 0; h.shieldHp = 0; h.shieldT = 0; h.surgeT = 0; h.speedT = 0;
     h.bStore = 0; h.fTick = 0; h.bTick = 0; h.wTick = 0; h.spinA = 0; h.ultExt = 0; h.hist = []; h.histT = 0; h.auraT = 0;
-    h.ammo = h.cls.ammo || 0; h.reloadT = 0; h.idleT = 0; h.swingSide = 1;
+    h.ammo = h.cls.ammo || 0; h.reloadT = 0; h.netAmmo = null; h.swingSide = 1;
   };
   // every machine: the timers of buffs that the caster and the host both set
   CL.timers = function (h, dt) {
