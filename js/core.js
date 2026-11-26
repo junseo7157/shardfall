@@ -300,7 +300,7 @@
   }
   const defaultQuality = G.Mobile.on || (navigator.hardwareConcurrency || 8) <= 4 ? 'medium' : 'high';
   G.Settings = Object.assign(
-    { master: 0.8, music: 0.5, sfx: 0.8, quality: defaultQuality, shake: true, dmgNumbers: true, showFps: false, nick: '', color: 0, diff: 'normal' },
+    { master: 0.8, music: 0.5, sfx: 0.8, quality: defaultQuality, shake: true, dmgNumbers: true, showFps: false, nick: '', color: 0, diff: 'normal', soloClass: 'shard' },
     load('shardfall.settings')
   );
   G.saveSettings = () => store('shardfall.settings', G.Settings);
@@ -308,6 +308,19 @@
   G.Save = {
     data: Object.assign({ best: 0, bestWave: 0, shards: 0, forge: {}, runs: 0, totalKills: 0, wins: 0 }, load('shardfall.save')),
     write() { store('shardfall.save', this.data); },
+    // the records book: totals, one line per character and per mode+difficulty, and the recent runs.
+    // Whatever is stored is checked here, so a damaged or hand-edited save can't break the screen.
+    rec() {
+      const num = (v) => (Number.isFinite(+v) && +v >= 0 ? +v : 0);
+      const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+      let r = this.data.rec;
+      if (!r || typeof r !== 'object' || r.v !== 1) r = this.data.rec = { v: 1 };
+      for (const k of ['time', 'bosses', 'combo', 'solo', 'coop']) r[k] = num(r[k]);
+      r.cls = obj(r.cls);
+      r.diff = obj(r.diff);
+      r.hist = Array.isArray(r.hist) ? r.hist.filter((h) => h && typeof h === 'object').slice(0, 40) : [];
+      return r;
+    },
   };
 
   // true on the machine that owns the simulation (solo or co-op host)

@@ -1,6 +1,6 @@
 // ============================================================
-// SHARDFALL - classes: the ten heroes. Solo is always the shard mage; in co-op every player takes a
-// different one. Each has a trait, a basic attack, three skills (right click / Q / E) and an
+// SHARDFALL - classes: the ten heroes. Solo plays whichever one was picked; in co-op every player
+// takes a different one. Each has a trait, a basic attack, three skills (right click / Q / E) and an
 // ultimate (R), and its own way of playing:
 //   shard mage   beam, nova, meteor            guardian    raised shield, thrown shield, banner
 //   falconer     drawn bow, snare, hawk        pyromancer  flamethrower, fire dash, combustion
@@ -114,7 +114,7 @@
 
   // ---------- 1. shard mage: the solo hero ----------
   def({
-    id: 'shard', name: '파편술사', role: '만능 마법사', emblem: 'shard', css: '#8fb3f0', energy: null, ultDur: 5,
+    id: 'shard', tier: 1, name: '파편술사', role: '만능 마법사', emblem: 'shard', css: '#8fb3f0', energy: null, ultDur: 5,
     trait: { name: '마력 순환', desc: '스킬을 쓰면 2초 동안 공격 속도가 40% 빨라집니다.' },
     basic: { name: '파편탄', icon: 'shard', desc: '빠르게 연사하는 마력 파편' },
     skills: [
@@ -147,7 +147,7 @@
 
   // ---------- 2. guardian: holds the line ----------
   def({
-    id: 'guardian', name: '수호기사', role: '방패로 동료를 지키는 탱커', emblem: 'shield', css: '#f6d27a', energy: 0xffd98a, ultDur: 6, orb: false, size: 1.04,
+    id: 'guardian', tier: 2, name: '수호기사', role: '방패로 동료를 지키는 탱커', emblem: 'shield', css: '#f6d27a', energy: 0xffd98a, ultDur: 6, orb: false, size: 1.04,
     trait: { name: '불굴', desc: '받는 피해가 20% 줄고, 6m 안의 동료도 받는 피해가 10% 줄어듭니다.' },
     basic: { name: '성광 망치', icon: 'hammer', desc: '앞쪽을 크게 휘둘러 맞은 적을 모두 밀쳐내는 근접 공격', melee: { r: 3.4, arc: 1.9 }, knock: 9, sfx: 'swingHeavy' },
     stats(s) { s.maxHp = 160; s.armor += 5; s.speed *= 0.92; s.dmg = 24; s.fireRate = 1.9; },
@@ -266,7 +266,7 @@
 
   // ---------- 3. falconer: the bow and the hawk ----------
   def({
-    id: 'ranger', name: '매사냥꾼', role: '매와 함께 멀리서 노리는 명사수', emblem: 'bird', css: '#8fdcb3', energy: 0xa8f07a, ultDur: 7, orb: false,
+    id: 'ranger', tier: 2, name: '매사냥꾼', role: '매와 함께 멀리서 노리는 명사수', emblem: 'bird', css: '#8fdcb3', energy: 0xa8f07a, ultDur: 7, orb: false,
     trait: { name: '명사수', desc: '14m보다 먼 적에게 주는 피해 +30%. 치명타를 맞은 적에게 4초 동안 표식: 표식된 적은 모두에게 15% 더 아프게 맞습니다.' },
     basic: { name: '사냥 화살', icon: 'arrow', desc: '멀리 날아가 적 하나를 꿰뚫는 화살', spread: 0.06, sfx: 'bow' },
     stats(s) { s.maxHp = 90; s.speed *= 1.05; s.dmg = 20; s.fireRate = 3.1; s.projSpeed = 52; s.projLife = 0.78; s.projSize = 0.9; s.pierce += 1; s.crit += 0.06; },
@@ -344,7 +344,7 @@
 
   // ---------- 4. pyromancer: sets everything alight ----------
   def({
-    id: 'pyro', name: '화염술사', role: '불바다를 펼치는 광역 딜러', emblem: 'flame', css: '#f08c93', energy: 0xff8a3a, ultDur: 6,
+    id: 'pyro', tier: 1, name: '화염술사', role: '불바다를 펼치는 광역 딜러', emblem: 'flame', css: '#f08c93', energy: 0xff8a3a, ultDur: 6,
     trait: { name: '잿불', desc: '모든 공격이 3초 동안 불태웁니다. 불타던 적이 쓰러지면 터지며 주변에 불을 옮깁니다.' },
     basic: { name: '불꽃 다발', icon: 'flame', desc: '가까이에서 부채꼴로 퍼지는 화염구 세 개', spread: 0.2, sfx: 'fireball' },
     stats(s) { s.maxHp = 95; s.dmg = 7.5; s.fireRate = 4.0; s.projSpeed = 26; s.projLife = 0.52; s.projCount = 3; s.burn += 1; },
@@ -442,7 +442,7 @@
 
   // ---------- 5. cleric: keeps the party standing ----------
   def({
-    id: 'cleric', name: '빛의 사제', role: '동료를 살리고 지키는 치유사', emblem: 'feather', css: '#d2e2dc', energy: 0xffeebb, ultDur: 6, healUlt: 0.12,
+    id: 'cleric', tier: 2, name: '빛의 사제', role: '동료를 살리고 지키는 치유사', emblem: 'feather', css: '#d2e2dc', energy: 0xffeebb, ultDur: 6, healUlt: 0.12,
     trait: { name: '은총', desc: '자신과 8m 안의 동료가 1초마다 체력 2를 회복합니다. 동료를 치유하면 궁극기가 찹니다.' },
     basic: { name: '빛의 구슬', icon: 'orb', desc: '천천히 날아가 적을 따라가는 빛', spread: 0.14 },
     stats(s) { s.maxHp = 105; s.dmg = 14; s.fireRate = 3.6; s.projSpeed = 24; s.projLife = 1.0; s.projSize = 1.2; s.homing += 1; },
@@ -534,7 +534,7 @@
 
   // ---------- 6. berserker: the more it bleeds, the harder it hits ----------
   def({
-    id: 'berserker', name: '광전사', role: '피를 볼수록 강해지는 근접 전사', emblem: 'axe', css: '#e0765a', energy: 0xff5a3a, ultDur: 7, orb: false, size: 1.06,
+    id: 'berserker', tier: 1, name: '광전사', role: '피를 볼수록 강해지는 근접 전사', emblem: 'axe', css: '#e0765a', energy: 0xff5a3a, ultDur: 7, orb: false, size: 1.06,
     trait: { name: '피의 갈증', desc: '잃은 체력만큼 피해와 공격 속도가 최대 50% 늘고, 근접 공격 피해의 8%만큼 체력을 회복합니다.' },
     basic: { name: '쌍도끼', icon: 'axe', desc: '앞쪽을 빠르게 베어 가르는 근접 연타', melee: { r: 3.0, arc: 2.3 }, knock: 4, sfx: 'swing' },
     stats(s) { s.maxHp = 140; s.armor += 2; s.speed *= 1.02; s.dmg = 21; s.fireRate = 2.6; s.crit += 0.05; },
@@ -632,7 +632,7 @@
 
   // ---------- 7. engineer: turrets, mines and a pulse ----------
   def({
-    id: 'engineer', name: '기계공', role: '포탑과 장치로 전장을 짜는 기술자', emblem: 'gear', css: '#7fd6e0', energy: 0x6fe8ff, ultDur: 8, orb: false,
+    id: 'engineer', tier: 2, name: '기계공', role: '포탑과 장치로 전장을 짜는 기술자', emblem: 'gear', css: '#7fd6e0', energy: 0x6fe8ff, ultDur: 8, orb: false,
     trait: { name: '정밀 공학', desc: '설치한 장치가 내 카드 효과(피해·치명타)를 그대로 받습니다. 포탑 6m 안의 동료는 공격 속도 +15%.' },
     basic: { name: '리벳건', icon: 'bolt', desc: '빠르게 연사하는 리벳', spread: 0.1, sfx: 'rivet' },
     stats(s) { s.maxHp = 100; s.dmg = 10; s.fireRate = 4.4; s.projSpeed = 40; s.projLife = 0.6; s.projSize = 0.85; },
@@ -711,7 +711,7 @@
 
   // ---------- 8. assassin: strikes from the shadows ----------
   def({
-    id: 'assassin', name: '그림자 암살자', role: '그림자에서 급소를 노리는 자객', emblem: 'mask', css: '#a98be6', energy: 0xb07aff, ultDur: 3, orb: false, size: 0.97, bare: ['shoulders'],
+    id: 'assassin', tier: 3, name: '그림자 암살자', role: '그림자에서 급소를 노리는 자객', emblem: 'mask', css: '#a98be6', energy: 0xb07aff, ultDur: 3, orb: false, size: 0.97, bare: ['shoulders'],
     trait: { name: '급소', desc: '체력이 30% 아래인 적에게 피해 2배(보스는 1.5배). 은신 중 첫 공격은 반드시 치명타에 피해 3배.' },
     basic: { name: '쌍단검', icon: 'dagger', desc: '짧은 거리로 빠르게 던지는 단검 두 자루', spread: 0.08, sfx: 'knife' },
     stats(s) { s.maxHp = 85; s.speed *= 1.12; s.dmg = 14; s.fireRate = 4.6; s.projSpeed = 46; s.projLife = 0.3; s.projCount = 2; s.projSize = 0.8; s.crit += 0.12; s.critMult += 0.4; },
@@ -811,7 +811,7 @@
 
   // ---------- 9. chronomancer: bends time ----------
   def({
-    id: 'chrono', name: '시간술사', role: '시간을 비틀어 싸움을 다스리는 마법사', emblem: 'clock', css: '#8fe0d0', energy: 0x7fffe0, ultDur: 4,
+    id: 'chrono', tier: 3, name: '시간술사', role: '시간을 비틀어 싸움을 다스리는 마법사', emblem: 'clock', css: '#8fe0d0', energy: 0x7fffe0, ultDur: 4,
     trait: { name: '느린 시간', desc: '주변 6m의 적과 적 탄이 20% 느려집니다. 기본 공격에 맞은 적은 1.5초 동안 30% 둔화.' },
     basic: { name: '시간 구슬', icon: 'orb', desc: '맞은 적을 느리게 만드는 시간의 구슬', spread: 0.12, sfx: 'tick' },
     stats(s) { s.maxHp = 95; s.dmg = 15; s.fireRate = 3.7; s.projSpeed = 30; s.projLife = 0.8; s.projSize = 1.1; },
@@ -900,7 +900,7 @@
 
   // ---------- 10. gunslinger: six shots, then reload ----------
   def({
-    id: 'gunslinger', name: '총잡이', role: '여섯 발로 승부하는 무법자', emblem: 'gun', css: '#e8c07a', energy: 0xffc46a, ultDur: 2.5, orb: false, ammo: 6,
+    id: 'gunslinger', tier: 2, name: '총잡이', role: '여섯 발로 승부하는 무법자', emblem: 'gun', css: '#e8c07a', energy: 0xffc46a, ultDur: 2.5, orb: false, ammo: 6,
     trait: { name: '마지막 한 발', desc: '탄창의 마지막 한 발은 피해 2배에 반드시 치명타. 재장전이 끝나면 1.5초 동안 이동 속도 +20%.' },
     basic: { name: '리볼버', icon: 'gun', desc: '여섯 발을 쏘고 재장전(약 1.1초)', spread: 0.05, sfx: 'gun' },
     stats(s) { s.maxHp = 100; s.speed *= 1.05; s.dmg = 26; s.fireRate = 5.2; s.projSpeed = 64; s.projLife = 0.5; s.projSize = 0.8; s.crit += 0.08; },

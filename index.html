@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700;800;900&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=9">
+<link rel="stylesheet" href="css/style.css?v=10">
 <script type="importmap">
 {
   "imports": {
@@ -95,6 +95,7 @@
         <button class="mi" id="btn-play">혼자 하기</button>
         <button class="mi" id="btn-coop">같이 하기</button>
         <button class="mi" id="btn-forge">영혼의 대장간</button>
+        <button class="mi" id="btn-records">기록</button>
         <button class="mi" id="btn-help">조작법</button>
         <button class="mi" id="btn-settings">설정</button>
       </nav>
@@ -103,12 +104,40 @@
     </div>
   </div>
 
+  <div id="screen-chars" class="screen dim">
+    <div class="panel wide chars-panel">
+      <h2>캐릭터 선택</h2>
+      <p class="lead small">혼자 하기에 데려갈 캐릭터를 고르세요. 캐릭터마다 특성, 기본 공격, 스킬 3개와 궁극기, 쓰는 방법이 모두 다릅니다.</p>
+      <div id="solo-classes" class="cls-grid"></div>
+      <div id="solo-cls-info" class="cls-info"></div>
+      <div class="row-buttons">
+        <button class="btn primary" id="btn-chars-next">이 캐릭터로 · 난이도 고르기</button>
+        <button class="btn ghost" id="btn-chars-back">돌아가기</button>
+      </div>
+    </div>
+  </div>
+
   <div id="screen-diff" class="screen dim">
     <div class="panel wide">
       <h2>난이도</h2>
+      <div id="diff-char" class="diff-char"></div>
       <p class="lead">적과 보스의 체력, 그리고 그들이 주는 피해가 함께 바뀝니다. 어려울수록 점수와 영혼 파편을 더 받습니다.</p>
       <div id="diff-list" class="diff-list"></div>
-      <button class="btn ghost" id="btn-diff-back">돌아가기</button>
+      <button class="btn ghost" id="btn-diff-back">캐릭터 다시 고르기</button>
+    </div>
+  </div>
+
+  <div id="screen-records" class="screen dim">
+    <div class="panel wide rec-panel">
+      <h2>기록</h2>
+      <div class="rec-tabs" role="tablist">
+        <button class="rec-tab" role="tab" data-t="sum">요약</button>
+        <button class="rec-tab" role="tab" data-t="cls">캐릭터별</button>
+        <button class="rec-tab" role="tab" data-t="hist">최근 판</button>
+      </div>
+      <div id="rec-body"></div>
+      <p class="muted small rec-note">기록은 이 기기의 이 브라우저에 저장돼요. 다른 기기나 다른 링크에서 한 판은 따로 쌓입니다.</p>
+      <button class="btn ghost" id="btn-records-back">돌아가기</button>
     </div>
   </div>
 
@@ -196,7 +225,8 @@
         <li>5스테이지마다 보스가 나오고, 15스테이지를 넘기면 승리합니다.</li>
         <li>같이 하면 사람 수만큼 섬이 넓어지고 적이 많아지며, 적과 보스도 더 단단하고 아프게 칩니다. 대기실에서 배율을 볼 수 있어요.</li>
         <li>같이 하기는 2명부터 시작합니다. 경험치와 레벨은 팀이 함께 쌓고, 레벨이 오르거나 누가 상자를 열면 모두 카드를 한 장씩 각자 고릅니다.</li>
-        <li>같이 하기에서는 대기실에서 캐릭터 10명 중 하나를 겹치지 않게 고릅니다: 파편술사·수호기사·매사냥꾼·화염술사·빛의 사제·광전사·기계공·그림자 암살자·시간술사·총잡이. 캐릭터마다 특성, 기본 공격, 스킬 3개와 궁극기, 쓰는 방법이 모두 다릅니다. 대기실에서 캐릭터 위에 올리면 설명이 보여요.</li>
+        <li>캐릭터는 10명입니다: 파편술사·수호기사·매사냥꾼·화염술사·빛의 사제·광전사·기계공·그림자 암살자·시간술사·총잡이. 혼자 하기는 시작할 때 캐릭터 선택 화면에서, 같이 하기는 대기실에서 겹치지 않게 고릅니다. 캐릭터마다 특성, 기본 공격, 스킬 3개와 궁극기, 쓰는 방법이 모두 다르고, 캐릭터 위에 올리면 설명이 보여요.</li>
+        <li>메인 메뉴의 기록에서 지금까지의 판, 캐릭터별 최고 기록, 최근 40판의 결과와 고른 카드를 볼 수 있어요.</li>
         <li>같이 하기에서 카드를 고르는 11초 동안은 보호막으로 무적이지만, 그동안은 드론·칼날·포탑·매처럼 저절로 공격하는 것도 멈춥니다.</li>
         <li>스테이지가 오를수록 일반 몬스터가 점점 단단하고 빠르고 아파집니다.</li>
         <li>같이 하다 쓰러지면 남은 동료가 그 스테이지를 깨는 순간 다시 일어납니다. 모두 쓰러지면 실패입니다.</li>
@@ -303,7 +333,7 @@ try {
     ShaderPass: sp.ShaderPass, OutputPass: op.OutputPass, mergeGeometries: bgu.mergeGeometries,
   };
   const files = ['core', 'render', 'world', 'fx', 'audio', 'vis', 'icons', 'upgrades', 'hero', 'classes', 'projectiles', 'enemies', 'bosses', 'pickups', 'net', 'ui', 'touch', 'game'];
-  const BUILD = ['localhost', '127.0.0.1'].includes(location.hostname) ? String(Date.now()) : '14';
+  const BUILD = ['localhost', '127.0.0.1'].includes(location.hostname) ? String(Date.now()) : '15';
   for (let i = 0; i < files.length; i++) {
     setStatus('게임 데이터 받는 중 · ' + files[i]);
     await loadScript('js/' + files[i] + '.js?v=' + BUILD);

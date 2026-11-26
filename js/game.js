@@ -15,6 +15,7 @@
   let ws = 'none', waveT = 0, spawnT = 0, spawned = 0, budget = 0, isBoss = false, elitesLeft = 0, chestThisStage = false;
   let pickDelay = 0, pickWaitT = 0, netRemain = 0, netProgress = 0;
   let banked = 0, bankedKills = 0, wonOnce = false;
+  let runRec = null, recBank = { kills: 0, time: 0, bosses: 0 }; // this run's line in the records book
   const NEW_ENEMY = {
     2: ['주술사', '세 갈래로 탄을 쏩니다'], 3: ['폭탄병', '붙으면 터집니다. 붉은 원 밖으로'], 4: ['거석병', '팔을 들면 곧 내려찍습니다'],
     6: ['분열체', '죽으면 둘로 갈라집니다'], 7: ['망령 기사', '멀어지면 곁으로 순간이동합니다'], 8: ['도약 거미', '웅크리면 표시된 자리로 뛰어듭니다'],
@@ -135,8 +136,8 @@
     G.World.setAltarActive(false);
     G.World.resetObstacles();
   }
-  // solo is always the shard mage (soloClass exists for testing other characters alone)
-  Gm.soloClass = 'shard';
+  // solo plays the character picked on the character screen (kept in the settings)
+  Gm.soloClass = G.Classes.valid(G.Settings.soloClass) ? G.Settings.soloClass : 'shard';
   function setupHeroes(mode) {
     G.Heroes.clearOthers();
     if (mode === 'solo') {
@@ -186,6 +187,7 @@
     Gm.picksDone = 0; Gm.pickPause = false; pickDelay = 0.6; pickWaitT = 0;
     hitstopT = 0; slowT = 0; dyingT = 0; resultT = 0; ws = 'none'; isBoss = false;
     banked = 0; bankedKills = 0; wonOnce = false;
+    runRec = null; recBank = { kills: 0, time: 0, bosses: 0 };
     G.Render.satTarget = 1;
     G.Render.post.uSat.value = 1;
     G.Render.cam.targetZoom = 1;
@@ -228,7 +230,7 @@
   };
   Gm.quit = function () {
     if (Gm.mode !== 'solo') { Gm.leaveRoom(); return; }
-    finishRun(false);
+    finishRun(false, 'quit');
     Gm.toMenu();
   };
   Gm.toMenu = function () {
@@ -265,7 +267,7 @@
     G.Audio.music('menu');
   };
   Gm.leaveRoom = function () {
-    if (Gm.inRun()) finishRun(false);
+    if (Gm.inRun()) finishRun(false, 'quit');
     G.Net.leaveRoom();
     Gm.toMenu();
   };
@@ -285,10 +287,12 @@
     nextWave();
   };
 
-  // shards / kills are banked incrementally so victory -> endless -> defeat never double counts
-  function finishRun(victory) {
+  // shards / kills are banked incrementally so victory -> endless -> defeat never double counts.
+  // how: 'win', 'lose', 'quit' (gave up or left) or 'ended' (the host closed the room or stopped)
+  function finishRun(victory, how) {
     const d = G.Save.data;
-    if (victory && !wonOnce) { wonOnce = true; d.wins++; }
+    const firstWin = victory && !wonOnce;
+    if (firstWin) { wonOnce = true; d.wins++; }
     const total = Gm.shardsEarned() + (wonOnce ? Math.round(150 * D().rw) : 0);
     d.shards += Math.max(0, total - banked);
     d.totalKills += Math.max(0, Gm.stats.kills - bankedKills);
@@ -297,8 +301,45 @@
     Gm.newBest = Gm.score > d.best;
     if (Gm.newBest) d.best = Math.floor(Gm.score);
     d.bestWave = Math.max(d.bestWave, Gm.wave);
+    recordRun(firstWin, how || (victory ? 'win' : 'lose'), total);
     G.Save.write();
     return total;
+  }
+  // The records book. Each run is one line in the history (the latest 40), written when it first
+  // ends and updated if it goes on (a win carried into endless); the per-character and
+  // per-difficulty totals only ever take what is new since the last time.
+  function recordRun(firstWin, how, shards) {
+    const R = G.Save.rec(), P = G.Player, cls = P.cls.id, mode = Gm.mode === 'solo' ? 'solo' : 'coop';
+    const num = (v) => (Number.isFinite(+v) && +v >= 0 ? +v : 0);
+    const line = (o, keys) => { for (const k of keys) o[k] = num(o[k]); return o; };
+    const ch = (R.cls[cls] = line(R.cls[cls] && typeof R.cls[cls] === 'object' ? R.cls[cls] : {}, ['n', 'w', 'wave', 'score', 'kills', 'time']));
+    const dk = mode + ':' + Gm.diff;
+    const df = (R.diff[dk] = line(R.diff[dk] && typeof R.diff[dk] === 'object' ? R.diff[dk] : {}, ['n', 'w', 'wave', 'score']));
+    const S = Gm.stats, wave = Gm.wave, score = Math.floor(Gm.score);
+    const before = { wave: ch.wave, score: ch.score };
+    if (!runRec) {
+      ch.n++; df.n++; R[mode]++;
+      runRec = { at: Date.now(), m: mode, pc: Gm.players(), c: cls, d: Gm.diff, res: how };
+      R.hist.unshift(runRec);
+      if (R.hist.length > 40) R.hist.length = 40;
+    }
+    if (firstWin) { ch.w++; df.w++; }
+    const dk2 = Math.max(0, S.kills - recBank.kills), dt = Math.max(0, Gm.time - recBank.time), db = Math.max(0, S.bosses - recBank.bosses);
+    ch.kills += dk2; ch.time += dt; R.time += dt; R.bosses += db;
+    recBank = { kills: S.kills, time: Gm.time, bosses: S.bosses };
+    ch.wave = Math.max(ch.wave, wave); ch.score = Math.max(ch.score, score);
+    df.wave = Math.max(df.wave, wave); df.score = Math.max(df.score, score);
+    R.combo = Math.max(R.combo, S.maxCombo);
+    // a won run stays won, a lost one stays lost; otherwise the latest word on how it ended
+    if (runRec.res !== 'win' && !(runRec.res === 'lose' && how !== 'win')) runRec.res = how;
+    Object.assign(runRec, {
+      at: Date.now(), wave, score, kills: S.kills, time: Math.floor(Gm.time), lv: Gm.team.lv, boss: S.bosses, elite: S.elites, combo: S.maxCombo, sh: shards,
+      dmg: mode === 'solo' ? Math.round(S.damage) : 0, best: Gm.newBest ? 1 : 0,
+      cards: P.up.order.slice(0, 24).map((id) => [id, P.up.levels[id] || 1]),
+      team: mode === 'coop' ? G.Heroes.list.filter((h) => h !== P).slice(0, 3).map((h) => [U.clean(h.name, 12) || '동료', h.cls.id]) : [],
+    });
+    // what the results screen celebrates for this character
+    Gm.clsBest = before.wave > 0 || before.score > 0 ? (wave > before.wave ? 'wave' : score > before.score ? 'score' : '') : ch.n === 1 ? 'first' : '';
   }
   function showResults(victory) {
     const shards = finishRun(victory);
@@ -306,7 +347,7 @@
     G.UI.setPlaying(false);
     G.UI.showGameOver({
       victory, score: Gm.score, wave: Gm.wave, level: Gm.team.lv, time: Gm.time, stats: Gm.stats, shards, newBest: Gm.newBest, diff: D(),
-      canContinue: victory && Gm.mode !== 'client', coop: Gm.mode !== 'solo', host: Gm.mode === 'host',
+      canContinue: victory && Gm.mode !== 'client', coop: Gm.mode !== 'solo', host: Gm.mode === 'host', cls: G.Player.cls, clsBest: Gm.clsBest,
     });
   }
   function enterDying() {
@@ -340,7 +381,7 @@
     G.Heroes.remove(h);
   };
   Gm.netEnded = function (msg) {
-    if (Gm.inRun()) finishRun(false);
+    if (Gm.inRun()) finishRun(false, 'ended');
     G.Net.leaveRoom();
     Gm.toMenu();
     G.UI.toast(msg, 'warn', 5);
@@ -361,7 +402,7 @@
       G.UI.setPlaying(true);
       return;
     }
-    if (ph === 'lobby') { if (Gm.inRun()) finishRun(false); Gm.toLobby(); return; }
+    if (ph === 'lobby') { if (Gm.inRun()) finishRun(false, 'ended'); Gm.toLobby(); return; }
     if ((ph === 'over' || ph === 'win') && Gm.mode === 'client' && Gm.inRun()) {
       if (ph === 'win') G.Audio.play('victory'); else { G.Audio.play('gameOver'); G.Render.satTarget = 0.15; }
       resultT = 1.6;

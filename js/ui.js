@@ -40,8 +40,24 @@
     }
 
     const go = (id, fn) => $(id).addEventListener('click', () => { G.Audio.play('ui'); fn(); });
-    go('btn-play', () => UI.show('diff'));
-    go('btn-diff-back', () => UI.show('menu'));
+    go('btn-play', () => UI.show('chars'));
+    go('btn-diff-back', () => UI.show('chars'));
+    go('btn-chars-next', () => UI.show('diff'));
+    go('btn-chars-back', () => UI.show('menu'));
+    go('btn-records', () => UI.show('records'));
+    go('btn-records-back', () => UI.show('menu'));
+    $('diff-char').addEventListener('click', (e) => { if (e.target.closest('button')) { G.Audio.play('ui'); UI.show('chars'); } });
+    document.querySelector('.rec-tabs').addEventListener('click', (e) => {
+      const b = e.target.closest('.rec-tab');
+      if (b && b.dataset.t !== UI.recTab) { G.Audio.play('ui'); UI.renderRecords(b.dataset.t); }
+    });
+    // a line in the history opens to show the cards and the rest of that run
+    $('rec-body').addEventListener('click', (e) => {
+      const li = e.target.closest('.rh-item');
+      if (!li) return;
+      li.classList.toggle('open');
+      G.Audio.play('hover');
+    });
     go('btn-coop', () => UI.show('coop'));
     go('btn-forge', () => UI.show('forge'));
     go('btn-help', () => UI.show('help'));
@@ -115,6 +131,22 @@
       if (UI.current !== 'diff' || e.repeat || G.Input.typing(e)) return;
       const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
       if (i >= 0) UI.pickDiff(G.Game.DIFF_KEYS[i]);
+      else if (e.code === 'Escape') UI.show('chars');
+    });
+    // the character screen: arrows move along the grid, Enter goes on, Esc goes back
+    addEventListener('keydown', (e) => {
+      if (UI.current !== 'chars' || G.Input.typing(e)) return;
+      const order = G.Classes.order, i = Math.max(0, order.indexOf(G.Game.soloClass));
+      const cols = getComputedStyle($('solo-classes')).gridTemplateColumns.split(' ').length || 5;
+      const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -cols, ArrowDown: cols }[e.code];
+      if (step) { e.preventDefault(); const j = i + step; if (j >= 0 && j < order.length) UI.pickSolo(order[j]); }
+      else if (e.code === 'Enter' && !e.repeat) { e.preventDefault(); G.Audio.play('ui'); UI.show('diff'); }
+      else if (e.code === 'Escape' && !e.repeat) UI.show('menu');
+    });
+    addEventListener('keydown', (e) => {
+      if (UI.current !== 'records' || e.repeat || G.Input.typing(e)) return;
+      const t = { Digit1: 'sum', Digit2: 'cls', Digit3: 'hist' }[e.code];
+      if (t) UI.renderRecords(t);
       else if (e.code === 'Escape') UI.show('menu');
     });
     addEventListener('keydown', (e) => {
@@ -136,6 +168,8 @@
     document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === 'screen-' + name));
     UI.current = name;
     if (name === 'menu') UI.refreshMenu();
+    if (name === 'chars') UI.renderChars();
+    if (name === 'records') UI.renderRecords();
     if (name === 'diff') UI.renderDiff();
     if (name === 'coop') UI.renderCoop();
     if (name === 'lobby') UI.renderLobby();
@@ -179,6 +213,10 @@
   };
   UI.renderDiff = function () {
     const Gm = G.Game, cur = G.Settings.diff;
+    // who is going in (and a way back to change it)
+    const c = G.Classes.get(Gm.soloClass);
+    $('diff-char').innerHTML = `<span class="dc-ico" style="--cc:${c.css}">${G.Icons.svg(c.emblem)}</span>` +
+      `<span class="dc-txt"><small>캐릭터</small><b>${c.name}</b><em>${c.role}</em></span><button class="btn small">바꾸기</button>`;
     const list = $('diff-list');
     list.innerHTML = Gm.DIFF_KEYS.map((k, i) => {
       const d = Gm.DIFFS[k], tx = DIFF_TEXT[k];
@@ -288,19 +326,170 @@
     else setStatus('lobby-status', wait || '방장이 시작하기를 기다리는 중', !!wait && !wait.endsWith('...'));
   };
 
-  // the chosen (or hovered) character: trait, basic attack, three skills, ultimate
-  function renderClsInfo() {
-    const id = UI.clsHover || G.Net.classOf(G.Net.me);
-    if (UI.clsInfoKey === id) return;
-    UI.clsInfoKey = id;
-    const c = G.Classes.get(id), m = G.Mobile.on;
+  // a character's sheet: how hard it is to play, trait, basic attack, three skills, ultimate
+  const TIER = ['', '쉬움', '보통', '어려움'];
+  function clsInfoHtml(c, extra = '') {
+    const m = G.Mobile.on;
     const keys = m ? ['1번', '2번', '3번', '궁극기'] : ['우클릭', 'Q', 'E', 'R'];
     const how = (s) => `<i class="how">${G.Classes.HOW[s.kind][m ? 1 : 0]}</i>`;
-    $('lobby-cls-info').innerHTML = `<h4>${c.name} <small>${c.role}</small></h4>` +
+    const tier = c.tier ? `<span class="tier t${c.tier}" title="다루기 ${TIER[c.tier]}"><i>${'★'.repeat(c.tier)}${'☆'.repeat(3 - c.tier)}</i> 다루기 ${TIER[c.tier]}</span>` : '';
+    return `<h4>${c.name} <small>${c.role}</small>${tier}</h4>` + extra +
       `<p class="trait"><b>특성 · ${c.trait.name}</b> ${c.trait.desc}</p>` +
       `<ul><li><kbd>${m ? '오른쪽' : '좌클릭'}</kbd><b>${c.basic.name}</b>${c.basic.desc}</li>` +
       c.skills.map((s, i) => `<li><kbd>${keys[i]}</kbd><b>${s.name}</b>${how(s)}${s.desc}</li>`).join('') +
       `<li><kbd>${keys[3]}</kbd><b>${c.ult.name}</b>${c.ult.desc}</li></ul>`;
+  }
+  // the lobby: the chosen (or hovered) character
+  function renderClsInfo() {
+    const id = UI.clsHover || G.Net.classOf(G.Net.me);
+    if (UI.clsInfoKey === id) return;
+    UI.clsInfoKey = id;
+    $('lobby-cls-info').innerHTML = clsInfoHtml(G.Classes.get(id));
+  }
+
+  // ---------------- solo: character screen ----------------
+  // 'with the falconer': 로 after a vowel or ㄹ, 으로 after any other final consonant
+  const ro = (w) => { const k = w.charCodeAt(w.length - 1) - 0xac00; return w + (k < 0 || k > 11171 || k % 28 === 0 || k % 28 === 8 ? '로' : '으로'); };
+  UI.renderChars = function () {
+    const grid = $('solo-classes');
+    if (!grid.childElementCount) {
+      grid.innerHTML = G.Classes.order.map((id) => {
+        const c = G.Classes.get(id);
+        return `<button class="cls-card" data-c="${id}" style="--cc:${c.css}"><span class="cls-ico">${G.Icons.svg(c.emblem)}</span><b>${c.name}</b><small>${c.role}</small><i class="cls-rec"></i></button>`;
+      }).join('');
+      grid.addEventListener('click', (e) => { const b = e.target.closest('.cls-card'); if (b) UI.pickSolo(b.dataset.c); });
+      grid.addEventListener('dblclick', (e) => { const b = e.target.closest('.cls-card'); if (b) { UI.pickSolo(b.dataset.c); UI.show('diff'); } });
+      grid.addEventListener('mouseover', (e) => { const b = e.target.closest('.cls-card'); UI.soloHover = b ? b.dataset.c : null; renderSoloInfo(); });
+      grid.addEventListener('mouseleave', () => { UI.soloHover = null; renderSoloInfo(); });
+    }
+    // each card shows how far that character has been
+    const R = G.Save.rec();
+    for (const b of grid.children) {
+      const r = R.cls[b.dataset.c];
+      b.classList.toggle('mine', b.dataset.c === G.Game.soloClass);
+      b.querySelector('.cls-rec').textContent = r && r.n > 0 ? '최고 ' + (r.wave | 0) + '스테이지' : '';
+    }
+    UI.soloHover = null;
+    UI.soloInfoKey = null;
+    renderSoloInfo();
+  };
+  UI.pickSolo = function (id) {
+    if (!G.Classes.valid(id)) return;
+    if (G.Game.soloClass !== id) G.Audio.play('ui');
+    G.Game.soloClass = id;
+    G.Settings.soloClass = id;
+    G.saveSettings();
+    for (const b of $('solo-classes').children) b.classList.toggle('mine', b.dataset.c === id);
+    UI.soloHover = null;
+    renderSoloInfo();
+  };
+  function renderSoloInfo() {
+    const id = UI.soloHover || G.Game.soloClass;
+    $('btn-chars-next').textContent = ro(G.Classes.get(G.Game.soloClass).name) + ' · 난이도 고르기';
+    if (UI.soloInfoKey === id) return;
+    UI.soloInfoKey = id;
+    const r = G.Save.rec().cls[id], n = r ? r.n | 0 : 0;
+    const line = n > 0
+      ? `<p class="cls-rec-line">이 캐릭터로 <b>${n}</b>판 · 승리 <b>${r.w | 0}</b>번 · 최고 <b>${r.wave | 0}</b>스테이지 · 최고 점수 <b>${U.fmtNum(r.score || 0)}</b></p>`
+      : '<p class="cls-rec-line none">아직 이 캐릭터로 끝낸 판이 없어요</p>';
+    $('solo-cls-info').innerHTML = clsInfoHtml(G.Classes.get(id), line);
+  }
+
+  // ---------------- records ----------------
+  UI.recTab = 'sum';
+  const num = (v) => (Number.isFinite(+v) && +v >= 0 ? +v : 0);
+  const fmtDur = (s) => { s = Math.floor(num(s)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h ? h + '시간 ' + m + '분' : m ? m + '분' : s + '초'; };
+  const when = (ts) => {
+    ts = num(ts);
+    if (!ts) return '';
+    const d = new Date(ts), now = new Date(), ago = (now - d) / 1000;
+    if (ago < 60) return '방금';
+    if (ago < 3600) return Math.floor(ago / 60) + '분 전';
+    const hm = (d.getHours() < 12 ? '오전 ' : '오후 ') + ((d.getHours() % 12) || 12) + ':' + String(d.getMinutes()).padStart(2, '0');
+    if (d.toDateString() === now.toDateString()) return '오늘 ' + hm;
+    const y = new Date(now); y.setDate(now.getDate() - 1);
+    if (d.toDateString() === y.toDateString()) return '어제 ' + hm;
+    return (d.getFullYear() !== now.getFullYear() ? d.getFullYear() + '년 ' : '') + (d.getMonth() + 1) + '월 ' + d.getDate() + '일 ' + hm;
+  };
+  const RES = { win: ['승리', 'win'], lose: ['패배', 'lose'], quit: ['포기', 'quit'], ended: ['중단', 'quit'] };
+  UI.renderRecords = function (tab) {
+    if (tab) UI.recTab = tab;
+    const t = UI.recTab;
+    document.querySelectorAll('.rec-tab').forEach((b) => { const on = b.dataset.t === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
+    $('rec-body').innerHTML = t === 'cls' ? recClasses() : t === 'hist' ? recHistory() : recSummary();
+  };
+  function recSummary() {
+    const d = G.Save.data, R = G.Save.rec(), Gm = G.Game;
+    const runs = num(d.runs), wins = num(d.wins);
+    let fav = null;
+    for (const id of G.Classes.order) { const r = R.cls[id]; if (r && num(r.n) > 0 && (!fav || num(r.n) > num(R.cls[fav].n))) fav = id; }
+    const tiles = [
+      ['플레이', U.fmtNum(runs) + '판', R.solo + R.coop > 0 ? '혼자 ' + R.solo + ' · 같이 ' + R.coop : ''],
+      ['승리', U.fmtNum(wins) + '번', runs ? '승률 ' + Math.round((wins / runs) * 100) + '%' : ''],
+      ['최고 점수', U.fmtNum(num(d.best)), ''],
+      ['최고 스테이지', num(d.bestWave) | 0, num(d.bestWave) > 15 ? '무한 모드까지' : num(d.bestWave) >= 15 ? '끝까지 버팀' : ''],
+      ['총 처치', U.fmtNum(num(d.totalKills)), ''],
+      ['보스 처치', U.fmtNum(R.bosses) + '마리', ''],
+      ['플레이 시간', fmtDur(R.time), ''],
+      ['최고 연속 처치', U.fmtNum(R.combo), ''],
+    ];
+    let html = '<div class="rec-tiles">' + tiles.map((x) => `<div class="rt"><span>${x[0]}</span><b>${x[1]}</b>${x[2] ? `<em>${x[2]}</em>` : ''}</div>`).join('') + '</div>';
+    if (fav) {
+      const c = G.Classes.get(fav), r = R.cls[fav];
+      html += `<div class="rec-fav" style="--cc:${c.css}"><span class="rf-ico">${G.Icons.svg(c.emblem)}</span><span><small>가장 많이 한 캐릭터</small><b>${c.name}</b></span>` +
+        `<em>${num(r.n)}판 · 최고 ${num(r.wave) | 0}스테이지 · ${U.fmtNum(num(r.score))}점</em></div>`;
+    }
+    const cell = (k) => {
+      const r = R.diff[k];
+      if (!r || !(num(r.n) > 0)) return '<td class="none">—</td>';
+      return `<td><b>${num(r.wave) | 0}</b>스테이지 · ${U.fmtNum(num(r.score))}점<small>${num(r.w)}승 / ${num(r.n)}판</small></td>`;
+    };
+    html += '<h3 class="rec-h">난이도별 최고 기록</h3><table class="rec-table"><thead><tr><th>난이도</th><th>혼자 하기</th><th>같이 하기</th></tr></thead><tbody>' +
+      Gm.DIFF_KEYS.map((k) => `<tr><th class="d-${k}"><i></i>${Gm.DIFFS[k].name}</th>${cell('solo:' + k)}${cell('coop:' + k)}</tr>`).join('') + '</tbody></table>';
+    return html;
+  }
+  function recClasses() {
+    const R = G.Save.rec();
+    let top = null;
+    for (const id of G.Classes.order) { const r = R.cls[id]; if (r && num(r.n) > 0 && (!top || num(r.wave) > num(R.cls[top].wave) || (num(r.wave) === num(R.cls[top].wave) && num(r.score) > num(R.cls[top].score)))) top = id; }
+    const rows = G.Classes.order.map((id) => {
+      const c = G.Classes.get(id), r = R.cls[id], n = r ? num(r.n) : 0;
+      const badge = id === top ? '<em class="rc-top">최고 기록</em>' : '';
+      if (!n) return `<div class="rc-row none" style="--cc:${c.css}"><span class="rc-name"><i>${G.Icons.svg(c.emblem)}</i><b>${c.name}</b></span><span class="rc-empty">아직 끝낸 판이 없어요</span></div>`;
+      return `<div class="rc-row" style="--cc:${c.css}"><span class="rc-name"><i>${G.Icons.svg(c.emblem)}</i><b>${c.name}</b>${badge}</span>` +
+        `<span>${n}</span><span>${num(r.w)}</span><span><b>${num(r.wave) | 0}</b></span><span>${U.fmtNum(num(r.score))}</span><span class="rc-x">${U.fmtNum(num(r.kills))}</span><span class="rc-x">${fmtDur(r.time)}</span></div>`;
+    }).join('');
+    return '<div class="rec-cls"><div class="rc-row head"><span>캐릭터</span><span>판</span><span>승리</span><span>최고 스테이지</span><span>최고 점수</span><span class="rc-x">처치</span><span class="rc-x">플레이 시간</span></div>' +
+      rows + '</div><p class="muted small">혼자 하기와 같이 하기를 모두 합친 기록이에요. 같이 하기 점수는 팀 점수입니다.</p>';
+  }
+  function recHistory() {
+    const R = G.Save.rec(), Gm = G.Game, UP = G.Upgrades;
+    if (!R.hist.length) return '<p class="rec-empty">아직 남은 판이 없어요.<br>한 판을 끝내면 여기에 결과와 고른 카드가 쌓여요.</p>';
+    const items = R.hist.map((h, i) => {
+      const c = G.Classes.get(h.c), dk = Gm.DIFFS[h.d] ? h.d : 'normal', res = RES[h.res] || RES.quit;
+      const wave = num(h.wave) | 0, coop = h.m === 'coop', mode = coop ? '같이 ' + U.clamp(num(h.pc) | 0, 2, 4) + '인' : '혼자';
+      const stats = [['레벨', num(h.lv) | 0], ['처치', U.fmtNum(num(h.kills))], ['시간', U.fmtTime(num(h.time))], ['보스', num(h.boss) | 0], ['엘리트', num(h.elite) | 0],
+        ['최대 연속', num(h.combo) | 0], ['영혼 파편', '+' + (num(h.sh) | 0)]];
+      if (!coop && num(h.dmg) > 0) stats.push(['준 피해', U.fmtNum(num(h.dmg))]);
+      const cards = (Array.isArray(h.cards) ? h.cards : []).map((q) => {
+        const d = Array.isArray(q) && UP.byId[q[0]];
+        if (!d) return '';
+        const lv = U.clamp(num(q[1]) | 0, 1, 99);
+        return `<span class="rh-card r-${d.rarity}" title="${U.esc(UP.nameOf(d, { cls: c }))}${lv > 1 ? ' ' + lv + '단계' : ''}">${G.Icons.svg(d.icon)}${lv > 1 ? `<b>${lv}</b>` : ''}</span>`;
+      }).join('');
+      const team = coop && Array.isArray(h.team) ? h.team.filter(Array.isArray).map((q) => `<span>${U.esc(U.clean(q[0], 12) || '동료')} <small>${G.Classes.get(q[1]).name}</small></span>`).join('') : '';
+      return `<li class="rh-item" style="--cc:${c.css}">` +
+        `<div class="rh-main"><span class="rh-res ${res[1]}">${res[0]}</span>` +
+        `<span class="rh-char"><i>${G.Icons.svg(c.emblem)}</i><b>${c.name}</b></span>` +
+        `<span class="rh-meta"><em class="d-${dk}">${Gm.DIFFS[dk].name}</em> · ${mode}</span>` +
+        `<span class="rh-stage">${h.res === 'win' && wave > 15 ? '무한 ' : ''}<b>${wave}</b>스테이지</span>` +
+        `<span class="rh-score"><b>${U.fmtNum(num(h.score))}</b>점${h.best ? '<i class="rh-best">최고</i>' : ''}</span>` +
+        `<span class="rh-when">${when(h.at)}</span><span class="rh-arrow"></span></div>` +
+        `<div class="rh-more"><div class="rh-stats">${stats.map((s) => `<span><small>${s[0]}</small><b>${s[1]}</b></span>`).join('')}</div>` +
+        `<div class="rh-sub">고른 카드</div><div class="rh-cards">${cards || '<span class="muted small">카드 없음</span>'}</div>` +
+        (team ? `<div class="rh-sub">함께한 동료</div><div class="rh-team">${team}</div>` : '') + '</div></li>';
+    }).join('');
+    return `<ul class="rec-hist">${items}</ul><p class="muted small">최근 40판까지 남아요. 줄을 누르면 고른 카드와 자세한 기록이 보여요.</p>`;
   }
 
   // ---------------- toasts / banners ----------------
@@ -604,10 +793,14 @@
     t.className = o.victory ? 'victory' : 'defeat';
     $('go-sub').textContent = o.victory ? '15스테이지를 끝까지 버텼습니다' : '스테이지 ' + o.wave + (o.coop ? '에서 모두 쓰러졌습니다' : '에서 쓰러졌습니다');
     const st = o.stats;
-    const rows = [['난이도', o.diff ? o.diff.name : '보통'], ['점수', U.fmtNum(o.score)], ['스테이지', o.wave], ['레벨', o.level], ['시간', U.fmtTime(o.time)], ['처치', U.fmtNum(st.kills)],
-      ['최대 연속 처치', st.maxCombo], ['엘리트', st.elites], ['보스', st.bosses]];
-    if (!o.coop) rows.splice(7, 0, ['준 피해', U.fmtNum(st.damage)], ['받은 피해', U.fmtNum(st.taken)]);
-    $('go-stats').innerHTML = (o.newBest ? '<div class="new-best">최고 점수 갱신</div>' : '') + rows.map((r) => `<div><span>${r[0]}</span><b>${r[1]}</b></div>`).join('');
+    const rows = [['캐릭터', o.cls ? o.cls.name : '파편술사'], ['난이도', o.diff ? o.diff.name : '보통'], ['점수', U.fmtNum(o.score)], ['스테이지', o.wave], ['레벨', o.level], ['시간', U.fmtTime(o.time)],
+      ['처치', U.fmtNum(st.kills)], ['최대 연속 처치', st.maxCombo], ['엘리트', st.elites], ['보스', st.bosses]];
+    if (!o.coop) rows.splice(8, 0, ['준 피해', U.fmtNum(st.damage)], ['받은 피해', U.fmtNum(st.taken)]);
+    // what this run did for the records book
+    const marks = [];
+    if (o.newBest) marks.push('최고 점수 갱신');
+    if (o.cls && o.clsBest) marks.push(o.cls.name + (o.clsBest === 'first' ? ' 첫 기록' : o.clsBest === 'wave' ? ' 최고 스테이지 갱신' : ' 최고 점수 갱신'));
+    $('go-stats').innerHTML = (marks.length ? `<div class="new-best">${marks.join(' · ')}</div>` : '') + rows.map((r) => `<div><span>${r[0]}</span><b>${r[1]}</b></div>`).join('');
     $('go-shards').textContent = '영혼 파편 +' + o.shards + ' · 보유 ' + U.fmtNum(G.Save.data.shards);
     $('btn-continue').classList.toggle('hidden', !o.canContinue);
     $('btn-retry').classList.toggle('hidden', o.coop && !o.host);
