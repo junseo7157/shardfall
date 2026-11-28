@@ -467,7 +467,7 @@
       }
       G.FX.burst(ox, this.y + 1.4, oz, { count: 3, color: col, intensity: 2.4, speed: [2, 5], life: [0.08, 0.15], size: [0.28, 0.02], dir: { x: Math.cos(base), y: 0, z: Math.sin(base) }, cone: 0.5 });
       if (this === G.Player) { G.Audio.play(b.sfx || 'shoot', { pitch: this.ultT > 0 ? 1.25 : 1 }); G.UI.fireKick(); }
-      if (s.echo && Math.random() < s.echo) this.echoQ.push(0.09);
+      if (s.echo && !mod.noEcho && Math.random() < s.echo) this.echoQ.push(0.09);
       return true;
     }
 

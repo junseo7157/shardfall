@@ -684,15 +684,48 @@
     },
   });
 
-  // ---------- 7. engineer: turrets, mines and a pulse ----------
+  // ---------- 7. engineer: its machines do the fighting ----------
+  // A turret shoots like the rivet gun with every attack card the engineer has picked. The gun is
+  // the weaker sidearm (gunK) that names the turrets' target, and the overclock drives them hard.
+  // (tuned with tools/harness.js __mid: a 40-monster wave with no cards / 8 / 16 cards clears in about
+  // the same time as before the rework, and the machines deal about three quarters of the damage)
+  const ENG = (CL.ENG = { gunK: 0.82, turretK: 0.52, rate: 4.4, turretCd: 0.3, markK: 1.2, markT: 3, mine: 55, ocRate: 1.6, ocBoom: 1.3 });
+  // the rivet gun always fires a single rivet and never echoes: cards that add shots go to the turrets
+  const ENG_GUN = { dmgK: 0.82, more: 0, noEcho: true };
+  const ALSO_TURRET = (txt) => ({ desc: (l, h) => txt(h) });
+  // the enemy the rivet gun hit last, while it is still the turrets' target (every machine knows it)
+  const engTarget = (o) => {
+    if (!(o.engMarkUntil > G.Game.time)) return null;
+    const e = o.engMarkId === -1 ? G.Bosses.targets[0] : G.Enemies.byId(o.engMarkId);
+    return e && e.alive ? e : null;
+  };
   def({
     id: 'engineer', tier: 2, name: '기계공', role: '포탑과 장치로 전장을 짜는 기술자', emblem: 'gear', css: '#7fd6e0', energy: 0x6fe8ff, ultDur: 6, orb: false,
-    trait: { name: '정밀 공학', desc: '설치한 장치가 내 카드 효과(피해·치명타)를 그대로 받습니다. 포탑 6m 안의 동료는 공격 속도 +15%.' },
-    basic: { name: '리벳건', icon: 'bolt', desc: '빠르게 연사하는 리벳', spread: 0.1, sfx: 'rivet' },
+    trait: { name: '정밀 공학', desc: '포탑이 리벳건처럼 쏩니다: 내 공격 카드(공격 속도·관통·튕김·추적·불씨·서리·번개 등)를 포탑도 그대로 받고, 탄 수를 늘리는 카드(세 갈래·메아리)는 포탑에만 붙습니다. 리벳에 맞은 적은 3초 동안 표적이 되어 포탑이 먼저 노리고, 포탑 피해를 20% 더 받습니다. 포탑 6m 안의 동료는 공격 속도 +15%.' },
+    basic: { name: '리벳건', icon: 'bolt', desc: '빠르게 연사하는 리벳. 맞힌 적을 포탑의 표적으로 지정함(직접 주는 피해는 약한 보조 무기)', spread: 0.1, sfx: 'rivet' },
     stats(s) { s.maxHp = 100; s.dmg = 10; s.fireRate = 4.4; s.projSpeed = 40; s.projLife = 0.6; s.projSize = 0.85; },
+    fireMod: (h) => { ENG_GUN.dmgK = ENG.gunK; ENG_GUN.more = 1 - Math.max(1, h.stats.projCount); return ENG_GUN; },
+    // a rivet that lands names the turrets' target (the host decides, and tells everyone again every
+    // 1.2 s while the same enemy keeps being hit)
+    onHitK(h, t, dealt, crit, killed, o) {
+      if (o.source !== 'bolt' || killed || !t.alive) return;
+      const id = eid(t), now = G.Game.time;
+      if (h.engMarkId === id && (h.engMarkSent || 0) > now) { h.engMarkUntil = now + ENG.markT; return; }
+      h.engMarkSent = now + 1.2;
+      G.Net.vis('enMark', h.key, id);
+    },
+    // the attack cards say that the turrets get them too
+    cardAlt: {
+      rapid: ALSO_TURRET(() => '리벳건과 포탑의 공격 속도 <b>+12%</b>'),
+      multishot: ALSO_TURRET((h) => `포탑이 한 번에 쏘는 탄 <b>+1</b> (지금 ${h ? h.stats.projCount : 1}발, 리벳건은 늘 1발)`),
+      pierce: ALSO_TURRET(() => '리벳과 포탑 탄이 적 <b>1명</b>을 더 뚫음'),
+      ricochet: ALSO_TURRET(() => '리벳과 포탑 탄이 다른 적에게 <b>1번</b> 더 튕김'),
+      seeker: ALSO_TURRET(() => '리벳과 포탑 탄이 가까운 적을 <b>따라감</b>'),
+      echo: ALSO_TURRET(() => '포탑이 <b>30%</b> 확률로 한 번 더 발사'),
+    },
     skills: [
       { name: '자동 포탑', icon: 'turret', kind: 'place', cd: 8, range: 10, tap: 'feet', ring: () => 1,
-        desc: '정한 자리에 14초 동안 포탑: 18m 안의 적에게 초당 3발 자동 사격(내 공격력의 65%). 최대 2개',
+        desc: '정한 자리에 14초 동안 포탑: 18m 안의 적에게 초당 3발 자동 사격(공격 카드 효과를 그대로 받고, 리벳으로 지정한 표적을 먼저 노림). 최대 2개',
         up: '포탑 피해 <b>+45%</b>, 사거리 <b>+20%</b>',
         use(h, a) {
           const p = freeSpot(a.x, a.z, 0.8);
@@ -707,17 +740,16 @@
           if (!h.auth) return;
           for (const m of minePoints(x, z, ang)) CL.mines.push({ id: id + '-' + m.k, x: m.x, z: m.z, arm: 0.6, t: life, by: h });
         } },
-      { name: '전자기 폭탄', icon: 'emp', kind: 'place', cd: 13, range: 16, ring: (s) => 5.5 * s.meteorRadius,
-        desc: '정한 자리에서 0.5초 뒤 터져 반지름 5.5m의 적을 2초 기절시키고 그 안의 적 탄을 모두 지움',
-        up: '전자기 폭탄 피해 <b>+40%</b>, 범위 <b>+15%</b>',
+      { name: '과부하', icon: 'overclock', kind: 'self', cd: 14,
+        desc: '6초 동안 내 포탑이 60% 더 빠르게 쏘고, 포탑 탄이 맞은 자리에서 터짐. 포탑의 남은 시간 +4초. 포탑이 하나도 없으면 바로 앞에 하나를 세움',
+        up: '과부하 시간 <b>+15%</b>, 과부하 중 포탑 피해 <b>+40%</b>',
         use(h, a) {
-          const s = h.stats, r = 5.5 * s.meteorRadius;
-          if (shows(h)) vb(h, 'enEmp', R1(a.x), R1(a.z), R1(r));
-          if (!h.auth) return;
-          G.Enemies.later(0.5, () => C.forEachTarget(a.x, a.z, r, (t) => {
-            C.damage(t, 30 * s.meteorMult * s.dmgMult, { canCrit: false, source: 'skill', cls: 'chain', by: h });
-            stun(t, 2);
-          }));
+          if (!shows(h)) return;
+          if (!CL.summons.some((q) => q.kind === 'turret' && q.owner === h.key && !q.dead)) {
+            const p = freeSpot(h.x + Math.cos(h.facing) * 1.6, h.z + Math.sin(h.facing) * 1.6, 0.8);
+            vb(h, 'enTurret', sid(h, 3, a.q), R1(p.x), R1(p.z), 14, h.key);
+          }
+          vb(h, 'enOc', R1(6 * h.stats.meteorRadius), h.key);
         } },
     ],
     ult: { name: '궤도 폭격', icon: 'satellite', desc: '위성에 좌표를 보내 조준한 곳에 0.8초 뒤 거대한 궤도 레이저를 내리꽂음. 레이저는 5초 동안 커서(조준점)를 따라 움직이며 닿는 적을 태우고(보스·정예에겐 2.5배), 끝날 때 크게 폭발' },
@@ -1156,7 +1188,7 @@
     if (h.cls.reset) h.cls.reset(h);
   };
   // every machine: the timers of buffs that the caster and the host both set
-  const TIMERS = ['stealthT', 'hasteT', 'rageT', 'critNextT', 'surgeT', 'speedT', 'parryT', 'formT', 'windT', 'hideT'];
+  const TIMERS = ['stealthT', 'hasteT', 'rageT', 'critNextT', 'surgeT', 'speedT', 'parryT', 'formT', 'windT', 'hideT', 'ocT'];
   CL.TIMERS = TIMERS;
   CL.timers = function (h, dt) {
     for (const k of TIMERS) if (h[k] > 0) h[k] = Math.max(0, h[k] - dt);
@@ -1253,6 +1285,8 @@
     else if (id === 'assassin' && hpFrac(t) < 0.3) m *= t.isBoss ? 1.25 : 1.5;
     if (h.cls.dealtK) m *= h.cls.dealtK(h, t, o || NOOPT);
     for (const q of HS.list) if (q.cls.id === 'cleric' && q.ultT > 0) { m *= 1.2; break; }
+    // the engineer's turrets hit their named target harder
+    if (o && o.source === 'turret' && h.engMarkUntil > G.Game.time && eid(t) === h.engMarkId) m *= ENG.markK;
     for (const s of CL.summons) if (s.buff && !s.dead && U.dist2(s.x, s.z, h.x, h.z) < s.r * s.r) { m *= s.buff; break; }
     return m;
   };
@@ -1351,7 +1385,7 @@
     const r = m.r * (0.85 + 0.15 * s.projSize) * (1 + (s.reach || 0)) * (mod.rK || 1), half = Math.min(Math.PI, (m.arc * (mod.arcK || 1) * (1 + 0.25 * (n - 1))) / 2);
     const a = Math.atan2(h.aimZ - h.z, h.aimX - h.x);
     h.swingSide = -(h.swingSide || 1);
-    swingFx(h, a, r, half, h.swingSide, mod.color || b.color || (m.r > 3.2 ? 0xffe6a0 : 0xffb090), m.arc < 1.2);
+    swingFx(h, a, r, half, h.swingSide, mod.color || b.color || (m.r > 3.2 ? 0xffe6a0 : 0xffb090), mod.thrust != null ? mod.thrust : m.arc < 1.2);
     const sfx = mod.sfx || b.sfx || 'swing';
     if (h === G.Player) { G.Audio.play(sfx); G.UI.fireKick(); }
     else if (near(h.x, h.z) > 0.5) G.Audio.play(sfx);
@@ -1380,10 +1414,13 @@
       }
       return;
     }
-    for (let i = 0; i <= n; i++) {
-      const k = i / n, b = a + side * (k - 0.5) * 2 * half, rr = r * (0.75 + 0.2 * Math.sin(k * Math.PI));
+    // a wide sweep gets more sparks along it; a whole turn also leaves a ring on the ground
+    const m = Math.max(n, Math.round(half * 9));
+    for (let i = 0; i <= m; i++) {
+      const k = i / m, b = a + side * (k - 0.5) * 2 * half, rr = r * (0.75 + 0.2 * Math.sin(k * Math.PI));
       G.FX.P.emit(h.x + Math.cos(b) * rr, y, h.z + Math.sin(b) * rr, Math.cos(b) * 2, 0.5, Math.sin(b) * 2, 0.16 + k * 0.08, 0.55, 0.05, c.r * 2.6, c.g * 2.6, c.b * 2.6, 1, 3, 0);
     }
+    if (half > 3) G.FX.ring(h.x, h.y + 0.25, h.z, r * 0.35, r, 0.22, color, 2.4);
   }
 
   // ================= the authoritative machine: zones, traps, mines, marks =================
@@ -1444,7 +1481,7 @@
       const s = m.by.stats;
       C.forEachTarget(m.x, m.z, 3, (t) => {
         const dx = t.x - m.x, dz = t.z - m.z, d = Math.hypot(dx, dz) || 1;
-        C.damage(t, 50 * s.dmgMult, { kx: dx / d, kz: dz / d, knock: 9, source: 'explosion', by: m.by });
+        C.damage(t, ENG.mine * s.dmgMult, { kx: dx / d, kz: dz / d, knock: 9, source: 'explosion', by: m.by });
       });
     }
   }
@@ -1511,17 +1548,29 @@
     },
     update(s, dt, t, o, idle) {
       s.mesh.scale.setScalar(grow(s) * 1.3);
-      const st = o.stats, range = 18 * (0.9 + 0.1 * st.lanceWidth);
+      const st = o.stats, range = 18 * (0.9 + 0.1 * st.lanceWidth), oc = o.ocT > 0;
+      // the enemy its engineer's rivets named comes first, then whatever is nearest
+      const mk = engTarget(o);
       s.rt -= dt;
-      if (s.rt <= 0 || !s.tg || !s.tg.alive) { s.rt = 0.25; s.tg = C.nearest(s.x, s.z, range); }
-      if (s.tg) s.ang = U.dampAngle(s.ang, Math.atan2(s.tg.z - s.z, s.tg.x - s.x), 14, dt);
+      if (mk && U.dist2(mk.x, mk.z, s.x, s.z) < range * range) s.tg = mk;
+      else if (s.rt <= 0 || !s.tg || !s.tg.alive) { s.rt = 0.25; s.tg = C.nearest(s.x, s.z, range); }
+      if (s.tg) s.ang = U.dampAngle(s.ang, Math.atan2(s.tg.z - s.z, s.tg.x - s.x), oc ? 22 : 14, dt);
       face(s.head, s.ang);
+      if (oc && Math.random() < 0.35) G.FX.spark(s.x + U.rand(-0.4, 0.4), s.y + 1.1, s.z + U.rand(-0.4, 0.4), 0x8ff4ff, 2, 3);
       s.cd -= dt;
       if (idle || !s.tg || s.cd > 0 || s.t < 0.3) return;
-      s.cd = 0.3;
-      const a = s.ang, mx = s.x + Math.cos(a) * 1.0, mz = s.z + Math.sin(a) * 1.0;
-      G.Proj.spawnPlayer({ x: mx, z: mz, y: s.y + 1.0, angle: a, speed: 46, life: range / 46 + 0.05, dmg: st.dmg * st.dmgMult * 0.65 * st.lanceMult,
-        size: 0.7, color: 0x8ff4ff, source: 'turret', by: o, cos: !G.auth() });
+      // it shoots the way its engineer's rivet gun does: attack speed, extra bolts, piercing,
+      // bouncing, seeking, echoes and every on-hit card (fire, frost, lightning, blasts) carry over.
+      // Overclocked, it fires twice as fast and its shots burst where they land
+      s.cd = ENG.turretCd / Math.max(0.2, st.fireRate / ENG.rate) / (oc ? ENG.ocRate : 1);
+      if (st.echo && Math.random() < st.echo) s.cd = Math.min(s.cd, 0.09);
+      const a = s.ang, mx = s.x + Math.cos(a) * 1.0, mz = s.z + Math.sin(a) * 1.0, n = Math.max(1, st.projCount);
+      const dmg = st.dmg * st.dmgMult * ENG.turretK * st.lanceMult * (oc ? st.meteorMult : 1);
+      for (let i = 0; i < n; i++) {
+        G.Proj.spawnPlayer({ x: mx, z: mz, y: s.y + 1.0, angle: a + (i - (n - 1) / 2) * 0.1, speed: 46, life: range / 46 + 0.05, dmg,
+          size: 0.7 * st.projSize * (oc ? 1.2 : 1), pierce: st.pierce, ricochet: st.ricochet, homing: st.homing, procs: true, boom: oc ? ENG.ocBoom * st.meteorRadius : 0,
+          color: oc ? 0xcffaff : 0x8ff4ff, source: 'turret', by: o, cos: !G.auth() });
+      }
       G.FX.burst(mx, s.y + 1.0, mz, { count: 3, color: 0x8ff4ff, intensity: 2.4, speed: [2, 5], life: [0.05, 0.12], size: [0.3, 0.02], dir: { x: Math.cos(a), y: 0, z: Math.sin(a) }, cone: 0.4 });
       if (near(s.x, s.z) > 0.55) G.Audio.play('turret');
     },
@@ -1850,7 +1899,8 @@
     }
   }
   // marks above enemies (kind 1 falconer, 2 death mark, 3 dead eye)
-  const MARK_C = { 1: [1.4, 2.8, 1.0], 2: [2.2, 0.9, 3.0], 3: [3.0, 0.7, 0.5] };
+  // (kind 4: the engineer's turret target)
+  const MARK_C = { 1: [1.4, 2.8, 1.0], 2: [2.2, 0.9, 3.0], 3: [3.0, 0.7, 0.5], 4: [0.9, 2.6, 3.0] };
   V.mark = (id, dur, kind) => { kind = (kind | 0) || 1; CL.marks.set(id + ':' + kind, { id: +id, kind, t: U.clamp(+dur || 1, 0.1, 10) }); };
   function updateMarks(dt) {
     if (!CL.marks.size) return;
@@ -1986,19 +2036,31 @@
     }
     G.Audio.play('mineThrow');
   };
-  V.enEmp = (x, z, r) => {
-    r = U.clamp(+r || 5.5, 1, 14);
-    const y = hy(x, z) + 1;
-    G.FX.telegraph({ shape: 'circle', x, z, r, dur: 0.5, color: 0x6fe8ff, k: 1.6 });
+  // the turrets' target: the owner's copy on every machine learns it, and a cyan reticle shows it
+  V.enMark = (key, id) => {
+    const o = ownerOf(key);
+    if (!o) return;
+    id = +id;
+    if (!Number.isFinite(id)) return;
+    if (o.engMarkId != null && o.engMarkId !== id) CL.marks.delete(o.engMarkId + ':4');
+    o.engMarkId = id; o.engMarkUntil = G.Game.time + ENG.markT;
+    V.mark(id, ENG.markT, 4);
+  };
+  // overclock: every turret of this engineer fires twice as fast (and its shots burst) for a while,
+  // and keeps standing 4 s longer
+  V.enOc = (dur, key) => {
+    const o = ownerOf(key);
+    if (!o) return;
+    o.ocT = U.clamp(+dur || 6, 0.5, 12);
+    for (const s of CL.summons) {
+      if (s.kind !== 'turret' || s.owner !== String(key) || s.dead) continue;
+      s.dur = Math.min(s.t + 30, s.dur + 4);
+      G.FX.ring(s.x, s.y + 0.6, s.z, 0.3, 2.4, 0.35, 0x8ff4ff, 2.6);
+      G.FX.lightning(o.x, o.y + 1.4, o.z, s.x, s.y + 1.2, s.z, 0x8ff4ff, 0.2, 0.25, 0.3);
+    }
+    G.FX.burst(o.x, o.y + 1.2, o.z, { count: 16, color: 0x9ff4ff, intensity: 2.6, spread: 'up', speed: [3, 7], life: [0.2, 0.4], size: [0.35, 0.02] });
     G.Audio.play('empCharge');
-    for (let i = 0; i < 5; i++) later(i * 0.1, () => G.FX.lightning(x + U.rand(-1, 1), y + 1.5, z + U.rand(-1, 1), x + U.rand(-r, r) * 0.6, y - 0.6, z + U.rand(-r, r) * 0.6, 0x8ff4ff, 0.12, 0.12, 0.6));
-    later(0.5, () => {
-      G.FX.ring(x, y - 0.8, z, 0.5, r, 0.35, 0x8ff4ff, 3);
-      G.FX.burst(x, y, z, { count: 40, color: 0x9ff4ff, intensity: 2.6, spread: 'ring', speed: [6, 14], life: [0.2, 0.4], size: [0.35, 0.03] });
-      G.Render.flash(x, y + 1, z, 0x6fe8ff, 60, 0.3, 18);
-      G.Proj.clearEnemyIn(x, z, r);
-      G.Audio.play('emp');
-    });
+    if (o === G.Player) G.UI.toast('과부하 · ' + Math.round(o.ocT) + '초', 'good', 1.4);
   };
 
   // ---- assassin ----
