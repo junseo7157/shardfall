@@ -895,7 +895,7 @@
           if (h.auth) windBlade(h, h.x, h.z, a.ang, h.res || 0, false);
         } },
     ],
-    ult: { name: '삼연 일섬', icon: 'triple', desc: '눈에 보이지 않는 속도로 조준한 곳을 세 방향에서 가로지르며 벰(그동안 무적): 세 일섬이 한가운데서 별 모양으로 겹쳐 그 자리의 적은 세 번 모두 맞고, 마지막 일섬은 반드시 치명타. 칼을 거두는 순간 베인 적 모두에게 한 번 더 피해. 기세가 많을수록 강함' },
+    ult: { name: '삼연 일섬', icon: 'triple', desc: '눈에 보이지 않는 속도로 조준한 곳을 세 방향에서 가로지르며 벰(그동안 무적): 세 일섬이 한가운데서 별 모양으로 겹쳐 그 자리의 적은 세 번 모두 맞고, 마지막 일섬은 반드시 치명타. 칼을 거두는 순간 베인 적 모두에게 한 번 더 피해를 주고, 별 한가운데의 가장 강한 적에게는 반드시 치명타인 마무리 일격. 기세가 많을수록 강함' },
     dealtK: (h) => 1 + 0.025 * (h.res || 0),
     // every third swing is the big one
     swingMod(h) { h.combo = ((h.combo || 0) + 1) % 3; h.swingN = (h.swingN || 0) + 1; return h.combo === 0 ? BM_BIG : null; },
@@ -946,7 +946,14 @@
         for (const t of hit) {
           if (!t.alive) continue;
           if (n++ < 12) G.Net.vis('bmSever', R1(t.x), R1(t.z));
-          C.damage(t, 50 * s.dmgMult, { source: 'ult', cls: 'crit', by: h });
+          C.damage(t, 40 * s.dmgMult, { source: 'ult', cls: 'crit', by: h });
+        }
+        // the last word: the strongest left standing where the three cuts cross takes a sure critical
+        // blow (a single target is what this ultimate is for; a crowd already took the cuts)
+        const best = strongest(p.x, p.z, 2.5);
+        if (best && best.alive) {
+          G.Net.vis('bmFinal', R1(best.x), R1(best.z));
+          C.damage(best, 110 * s.dmgMult, { crit: true, source: 'ult', by: h });
         }
       });
     },
@@ -1041,6 +1048,16 @@
     const y = hy(x, z) + 1.2;
     G.FX.burst(x, y, z, { count: 14, color: 0xffffff, intensity: 3, speed: [4, 9], life: [0.12, 0.28], size: [0.45, 0.02] });
     G.FX.beam(x - 1.2, y, z - 1.2, Math.PI / 4, 2.4, 0.3, 0xffe0b0, 0.25);
+  };
+  // the finishing blow at the crossing: a big white X cut through one enemy
+  V.bmFinal = (x, z) => {
+    const y = hy(x, z) + 1.2, L = 4.2;
+    for (const a of [Math.PI / 4, -Math.PI / 4]) G.FX.beam(x - Math.cos(a) * L / 2, y, z - Math.sin(a) * L / 2, a, L, 0.9, 0xffffff, 0.35);
+    G.FX.burst(x, y, z, { count: 36, color: 0xfff0d0, intensity: 3.2, speed: [6, 14], life: [0.2, 0.45], size: [0.55, 0.03] });
+    G.FX.ring(x, y - 0.9, z, 0.3, 3.2, 0.35, 0xffe0b0, 3);
+    G.Render.flash(x, y + 0.5, z, 0xffffff, 140, 0.35, 22);
+    G.Audio.play('iai'); G.Audio.play('crit');
+    if (near(x, z) > 0.4) G.Render.shake(0.35);
   };
 
   // ======================================================================

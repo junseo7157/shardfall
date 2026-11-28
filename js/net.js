@@ -9,7 +9,7 @@
 // ============================================================
 (() => {
   const G = window.G, U = G.U;
-  const PROTO = 'sf14', TAU = Math.PI * 2, MAX_PLAYERS = 4, EV_MAX = 44, BYTE_CAP = 3900;
+  const PROTO = 'sf15', TAU = Math.PI * 2, MAX_PLAYERS = 4, EV_MAX = 44, BYTE_CAP = 3900;
   // positions travel as 12 bits: ±81.9 m in 4 cm steps, enough for the widest (4-player) island
   const POS_O = 81.9, POS_K = 25;
   const enc = new TextEncoder();
