@@ -363,6 +363,8 @@
   // ======================================================================
   // 12. gravitist: drags everything into one place, then crushes it
   // ======================================================================
+  // S3 '부양 추락': gravity turned over: they hang in the air for t seconds, then hit the ground
+  const GV_LIFT = (CL.GV_LIFT = { t: 1.5, r: 4.5, dmg: 90 });
   def({
     id: 'gravity', tier: 3, name: '중력술사', role: '적을 한데 끌어모아 짓누르는 마법사', emblem: 'planet', css: '#c87ae8', energy: 0xc87aff, ultDur: 4.2,
     trait: { name: '압축', desc: '6m 안의 적 하나당 주는 피해 +4%(최대 +32%). 중력탄에 맞은 적 둘레 3m의 적은 맞은 자리로 끌려옵니다.' },
@@ -382,10 +384,25 @@
           const s = h.stats;
           C.forEachTarget(h.x, h.z, 7, (t) => { const [kx, kz] = outward(t, h.x, h.z); C.damage(t, 30 * s.dmgMult, { kx, kz, knock: 24, source: 'skill', by: h }); slow(t, 0.4, 1 + extra(s)); });
         } },
-      { name: '블랙홀', icon: 'blackhole', kind: 'place', cd: 14, range: 16, ring: (s) => 5 * s.meteorRadius,
-        desc: '정한 자리에 4초 동안 블랙홀: 5m 안의 적을 한가운데로 빨아들이며 피해를 주고 느리게 만듦(보스는 느려지기만). 끝에 짓눌러 터뜨림',
-        up: '블랙홀 피해 <b>+40%</b>, 범위 <b>+15%</b>',
-        use(h, a) { if (shows(h)) vb(h, 'gvHole', sid(h, 3, a.q), R1(a.x), R1(a.z), R1(5 * h.stats.meteorRadius), 4, 0, h.key); } },
+      { name: '부양 추락', icon: 'levitate', kind: 'place', cd: 12, range: 16, ring: (s) => GV_LIFT.r * s.meteorRadius,
+        desc: '정한 자리 4.5m의 적을 중력을 뒤집어 1.5초 동안 공중에 띄워 꼼짝 못 하게 한 뒤(단단한 적과 정예는 짧게, 보스는 느려지기만) 땅에 내리꽂음: 큰 피해, 함께 띄운 적이 많을수록 강해짐(하나당 +10%, 최대 +50%)',
+        up: '부양 추락 피해 <b>+40%</b>, 범위 <b>+15%</b>',
+        use(h, a) {
+          const s = h.stats, r = GV_LIFT.r * s.meteorRadius, x = R1(a.x), z = R1(a.z);
+          if (shows(h)) vb(h, 'gvLift', x, z, R1(r), h.key);
+          if (!h.auth) return;
+          let n = 0;
+          C.forEachTarget(x, z, r, (t) => {
+            if (t.isBoss) { slow(t, 0.5, GV_LIFT.t); return; }
+            n++;
+            stun(t, GV_LIFT.t); // (tough ones shake it off sooner: enemies.js applyStatus)
+          });
+          const k = 1 + Math.min(0.5, 0.1 * Math.max(0, n - 1));
+          G.Enemies.later(GV_LIFT.t, () => C.forEachTarget(x, z, r + 0.5, (t) => {
+            const [kx, kz] = outward(t, x, z);
+            C.damage(t, GV_LIFT.dmg * k * s.meteorMult * s.dmgMult, { kx, kz, knock: 4, source: 'skill', by: h });
+          }));
+        } },
     ],
     ult: { name: '사건의 지평선', icon: 'horizon', desc: '조준한 곳에 거대한 특이점을 엶: 3.5초 동안 9m 안의 모든 것을 빨아들이며 갈아 대고(보스·정예에겐 1.5배), 끝에 초신성으로 폭발해 10m를 날려 버림' },
     // the press: counted a few times a second, used by every hit
@@ -509,7 +526,34 @@
     G.Audio.play('gravPush');
     if (mine(key)) G.Render.shake(0.3);
   };
-  // the black hole (and, big, the event horizon): pulls, grinds, and at the end bursts
+  // '부양 추락': every machine floats the monsters standing in the circle (enemies.js draws them
+  // raised while levUntil lasts) and shows the slam; the host stuns them and deals the blow
+  V.gvLift = (x, z, r, key) => {
+    x = +x || 0; z = +z || 0; r = U.clamp(+r || 4.5, 1, 12);
+    const y = hy(x, z), now = G.Game.time;
+    G.FX.telegraph({ shape: 'circle', x, z, r, dur: GV_LIFT.t, color: 0xc87aff, k: 1.4 });
+    G.FX.ring(x, y + 0.2, z, 0.5, r, 0.4, 0xd8a0ff, 2.6);
+    for (const e of G.Enemies.list) {
+      if (!e.alive || U.dist2(e.x, e.z, x, z) > r * r) continue;
+      // as long as the stun holds them: tough ones (brutes, shields, elites) come down sooner
+      e.levDur = GV_LIFT.t * (e.type === 'brute' || e.type === 'shield' || e.elite ? 0.6 : 1); e.levUntil = now + e.levDur;
+    }
+    G.FX.emitter(GV_LIFT.t, () => {
+      for (let i = 0; i < 3; i++) {
+        const a = Math.random() * TAU, rr = Math.sqrt(Math.random()) * r;
+        G.FX.P.emit(x + Math.cos(a) * rr, y + 0.2, z + Math.sin(a) * rr, 0, U.rand(3, 6), 0, 0.5, 0.4, 0.03, 2.0, 1.1, 3.0, 1, 0, 0);
+      }
+    });
+    G.Audio.play('gravPull');
+    later(GV_LIFT.t, () => {
+      G.FX.ring(x, y + 0.25, z, 0.5, r + 1.5, 0.45, 0xffffff, 3);
+      G.FX.burst(x, y + 0.5, z, { count: 40, color: 0xd8a0ff, intensity: 2.8, spread: 'ring', speed: [6, 14], life: [0.25, 0.5], size: [0.5, 0.04], drag: 2.5 });
+      G.FX.smoke(x, y + 0.3, z, 8, 0x5a4a6a, r * 0.6, 3);
+      G.Audio.play('slam'); G.Audio.play('gravPush');
+      if (mine(key)) G.Render.shake(0.4);
+    });
+  };
+  // the event horizon (and the old black hole): pulls, grinds, and at the end bursts
   SUM.hole = {
     make(s) {
       const g = (s.mesh = new THREE.Group()), B = s.big;

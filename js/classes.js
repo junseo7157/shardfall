@@ -937,12 +937,11 @@
     basic: { name: '시간 구슬', icon: 'orb', desc: '맞은 적을 느리게 만드는 시간의 구슬', spread: 0.12, sfx: 'tick' },
     stats(s) { s.maxHp = 95; s.dmg = 18; s.fireRate = 3.7; s.projSpeed = 30; s.projLife = 0.8; s.projSize = 1.1; },
     skills: [
-      { name: '감속장', icon: 'hourglass', kind: 'place', cd: 10, range: 18, tap: 'feet', ring: (s) => 6 * (0.9 + 0.1 * s.lanceWidth),
-        desc: '6초 동안 반지름 6m 감속장: 안의 적은 70% 느려지며 초당 8 피해를 입고, 적 탄은 거의 멈춤',
-        up: '감속장 지속 <b>+2초</b>, 크기 <b>+20%</b>',
+      { name: '과거의 잔상', icon: 'pastself', kind: 'self', cd: 10,
+        desc: '6초 동안 1초 전의 내가 잔상으로 나타나 내가 지나온 길을 그대로 따라오며, 내 기본 공격을 1초 늦게 똑같이 쏨(피해 40%, 둔화와 카드 효과도 그대로). 잔상이 나타날 때와 사라질 때 시간 파문이 터져 4m 안의 적에게 피해를 주고 1.5초 동안 느리게 함',
+        up: '잔상 피해 <b>+45%</b>, 유지 <b>+20%</b>',
         use(h, a) {
-          const s = h.stats, r = 6 * (0.9 + 0.1 * s.lanceWidth), dur = 6 + (s.lanceMult - 1) * 4.4;
-          if (shows(h)) vb(h, 'chField', sid(h, 1, a.q), R1(a.x), R1(a.z), R1(r), R1(dur), h.key);
+          if (shows(h)) vb(h, 'chEcho', sid(h, 1, a.q), R1(6 * h.stats.lanceWidth), h.key);
         } },
       { name: '시간 역행', icon: 'rewind', kind: 'self', cd: 14,
         desc: '3초 전의 자리와 체력으로 되돌아감(지금 체력이 더 높으면 그대로). 떠난 자리의 잔상이 터지며 적을 밀쳐냄',
@@ -977,6 +976,12 @@
         } },
     ],
     ult: { name: '멈춘 시간', icon: 'clock', desc: '발밑에 거대한 시계가 펼쳐지며 4초 동안 모든 적과 적 탄이 멈춤(보스는 크게 느려짐). 멈춘 동안 적이 받은 피해의 75%가 쌓여 있다가 시간이 다시 흐르는 순간 한꺼번에 터지고, 시계 둘레 12m에 충격파' },
+    // the past self (S1) copies every shot a second late: each machine records them as its copy fires
+    onShot(h) {
+      const s = h.echoS;
+      if (s && !s.dead) s.q.push({ at: G.Game.time, ang: Math.atan2(h.aimZ - h.z, h.aimX - h.x) });
+      return null;
+    },
     ultStart(h) {
       G.Net.vis('ultFx', 'chrono', R1(h.x), R1(h.z), h.key);
       G.Net.vis('chStop', 4, R1(h.x), R1(h.z), h.key);
@@ -1726,41 +1731,71 @@
     end(s) { s.shell.material.dispose(); s.edge.material.dispose(); dropMesh(s); },
   };
 
-  SUM.field = {
+  // ---- chronomancer: the past self ----
+  // A glowing double that stands where its owner stood a second ago (it walks the same path) and fires
+  // every shot its owner fired, a second late. Every machine replays the shots its own copy of the
+  // owner fired (hero.fire → onShot); the host's copies deal the damage.
+  // (it also lets go a ripple of slowed time where it appears and where it fades: rip damage, 4 m)
+  // (tuned with tools/harness.js: the same clear times as the old slow field, 20.8 / 10.1 / 5.4 s)
+  const CH = (CL.CH = { lag: 1, k: 0.4, rip: 25, ripR: 4 });
+  function chRipple(o, x, z) {
+    G.Net.vis('ring', R1(x), R1(z), 0.4, CH.ripR, 0.4, 0x9ffff0);
+    if (!G.auth()) return;
+    const st = o.stats;
+    C.forEachTarget(x, z, CH.ripR, (q) => { C.damage(q, CH.rip * st.lanceMult * st.dmgMult, { canCrit: false, source: 'skill', cls: 'chain', by: o }); slow(q, 0.5, 1.5); });
+  }
+  SUM.chEcho = {
     make(s) {
       const g = (s.mesh = new THREE.Group());
-      s.disc = addM(g, geo('fdDisc', () => new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2)),
-        new THREE.MeshBasicMaterial({ color: U.hdr(0x7fffe0, 0.7), transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }), 0, 0.1, 0, false);
-      s.dial = new THREE.Group();
-      g.add(s.dial);
-      const tc = mat('fdTick', () => glowM(0x9ffff0, 2.4));
-      addM(s.dial, geo('fdRing', () => new THREE.TorusGeometry(1, 0.012, 4, 64).rotateX(Math.PI / 2)), tc, 0, 0.14, 0, false);
-      const tk = geo('fdTk', () => new THREE.BoxGeometry(0.02, 0.02, 0.1));
-      for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU, m = addM(s.dial, tk, tc, Math.cos(a) * 0.93, 0.14, Math.sin(a) * 0.93, false); m.rotation.y = -a; }
-      s.hand = addM(s.dial, geo('fdHand', () => new THREE.BoxGeometry(0.02, 0.02, 0.8).translate(0, 0, 0.4)), tc, 0, 0.15, 0, false);
-      s.y = hy(s.x, s.z);
-      g.position.set(s.x, s.y, s.z);
+      const body = ownMat(s, addMat(0x7fffe0, 1.3, 0.4)), rim = ownMat(s, addMat(0xbffff4, 2.2, 0.75));
+      addM(g, geo('ceBody', () => new THREE.CylinderGeometry(0.3, 0.42, 1.25, 10)), body, 0, 0.95, 0, false);
+      addM(g, geo('ceHead', () => new THREE.SphereGeometry(0.27, 12, 8)), body, 0, 1.82, 0, false);
+      s.ring = addM(g, geo('ceRing', () => new THREE.TorusGeometry(0.46, 0.03, 6, 28)), rim, 0, 1.5, -0.32, false);
+      s.trail = []; s.q = [];
+      const o = HS.get(s.owner);
+      if (o) { if (o.echoS && !o.echoS.dead) o.echoS.dead = true; o.echoS = s; s.x = o.x; s.z = o.z; }
+      s.x = s.x || 0; s.z = s.z || 0;
+      g.position.set(s.x, hy(s.x, s.z), s.z);
       scene().add(g);
-      s.tick = 0; s.slowK = 0.3; s.shotK = 0.25;
+      G.FX.burst(s.x, hy(s.x, s.z) + 1, s.z, { count: 18, color: 0x9ffff0, intensity: 2.4, spread: 'up', speed: [2, 5], life: [0.3, 0.6], size: [0.4, 0.02] });
       G.Audio.play('tickTock');
+      if (o && G.auth()) chRipple(o, s.x, s.z);
     },
     update(s, dt, t, o, idle) {
-      const k = grow(s, 0.35, 0.5);
-      s.mesh.scale.set(s.r * k, 1, s.r * k);
-      s.hand.rotation.y = -t * 0.6;
-      s.dial.rotation.y = t * 0.05;
-      s.disc.material.opacity = 0.18 + Math.sin(t * 2) * 0.05;
-      if (Math.random() < 0.5) { const a = Math.random() * TAU, rr = Math.sqrt(Math.random()) * s.r; G.FX.P.emit(s.x + Math.cos(a) * rr, s.y + 0.3, s.z + Math.sin(a) * rr, 0, U.rand(0.2, 0.6), 0, 1.4, 0.3, 0.05, 1.2, 2.6, 2.4, 1, 0.2, 0); }
-      if (!G.auth()) return;
-      s.tick -= dt;
-      if (s.tick > 0) return;
-      s.tick = 0.5;
-      for (const q of G.Bosses.targets) if (q.alive && U.dist2(q.x, q.z, s.x, s.z) < s.r * s.r) { slow(q, 0.5, 1.6); break; }
-      // time wears at whatever stands inside (not while its owner picks a card)
+      const now = G.Game.time;
+      s.trail.push([now, o.x, o.z, o.facing]);
+      while (s.trail.length > 2 && s.trail[1][0] <= now - CH.lag) s.trail.shift();
+      const p = s.trail[0], y = hy(p[1], p[2]);
+      s.x = p[1]; s.z = p[2];
+      s.mesh.position.set(s.x, y, s.z);
+      s.mesh.rotation.y = Math.PI / 2 - p[3];
+      s.ring.rotation.z = t * 3;
+      const op = Math.min(1, s.t / 0.3) * Math.min(1, Math.max(0, s.dur - s.t) / 0.4);
+      s.mats[0].opacity = 0.4 * op; s.mats[1].opacity = 0.75 * op;
+      if (Math.random() < 0.35) G.FX.trail(s.x + U.rand(-0.3, 0.3), y + U.rand(0.4, 1.9), s.z + U.rand(-0.3, 0.3), 0x7fffe0, 0.35, 0.45, 2);
+      // the shots its owner fired a second ago, fired again from here
       const st = o.stats;
-      if (!idle) C.forEachTarget(s.x, s.z, s.r, (q) => C.damage(q, 4 * st.lanceMult * st.dmgMult, { canCrit: false, source: 'zone', by: o }));
+      while (s.q.length && s.q[0].at <= now - CH.lag) {
+        const sh = s.q.shift();
+        if (idle) continue;
+        const n = Math.max(1, st.projCount), ox = s.x + Math.cos(sh.ang) * 0.6, oz = s.z + Math.sin(sh.ang) * 0.6;
+        for (let i = 0; i < n; i++) {
+          G.Proj.spawnPlayer({ x: ox, z: oz, y: y + 1.4, angle: sh.ang + (i - (n - 1) / 2) * 0.12, speed: st.projSpeed, life: st.projLife,
+            dmg: st.dmg * st.dmgMult * CH.k * st.lanceMult, size: st.projSize, pierce: st.pierce, ricochet: st.ricochet, homing: st.homing,
+            procs: true, color: 0xbffff4, source: 'bolt', by: o, cos: !G.auth() });
+        }
+        G.FX.burst(ox, y + 1.4, oz, { count: 3, color: 0xbffff4, intensity: 2.4, speed: [2, 5], life: [0.08, 0.15], size: [0.28, 0.02] });
+      }
     },
-    end(s) { s.disc.material.dispose(); dropMesh(s); },
+    end(s) {
+      const o = HS.get(s.owner);
+      if (o && o.echoS === s) o.echoS = null;
+      const m = s.mesh;
+      if (m) G.FX.burst(m.position.x, m.position.y + 1, m.position.z, { count: 14, color: 0x9ffff0, intensity: 2.2, speed: [1, 4], life: [0.2, 0.4], size: [0.35, 0.02] });
+      // fading out on its own (not replaced by a new one, not its owner leaving): one more ripple
+      if (o && G.auth() && s.t >= s.dur - 0.05) chRipple(o, s.x, s.z);
+      dropAll(s);
+    },
   };
 
   SUM.hawk = {
@@ -2088,7 +2123,7 @@
   };
 
   // ---- chronomancer ----
-  V.chField = (id, x, z, r, dur, key) => { CL.addSummon('field', { id: String(id), owner: String(key), x, z, r: U.clamp(+r || 6, 2, 14), dur: U.clamp(+dur || 6, 1, 20) }); };
+  V.chEcho = (id, dur, key) => { CL.addSummon('chEcho', { id: String(id), owner: String(key), dur: U.clamp(+dur || 6, 1, 15) }); };
   V.chRewind = (x0, z0, x1, z1, key) => {
     const y0 = hy(x0, z0) + 1, y1 = hy(x1, z1) + 1;
     G.FX.explosion(x0, y0 - 1, z0, 2.5, 0x7fffe0, 0.15 * near(x0, z0));

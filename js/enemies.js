@@ -791,6 +791,7 @@
   function render(t) {
     for (const k in rigs) rigs[k].begin();
     let na = 0, nb = 0;
+    const gt = G.Game.time;
     const camQ = G.Render.camera.quaternion;
     for (const e of E.list) {
       if (!e.alive) continue;
@@ -813,6 +814,12 @@
       else if (e.type === 'spider' && e.state === 'crouch') sq = 1.14;
       if (e.type === 'runner') lift = Math.abs(Math.sin(t * 16 + e.phase)) * 0.12 * e.moveAmt;
       else if (e.state === 'leap') lift = e.hop || 0;
+      // floated by the gravitist's '부양 추락': up fast, a bobbing hang, then slammed down
+      if (e.levUntil > gt) {
+        const k = 1 - (e.levUntil - gt) / e.levDur;
+        lift += k < 0.25 ? 2.2 * U.easeOutCubic(k / 0.25) : k < 0.85 ? 2.2 + Math.sin(gt * 6 + e.phase) * 0.12 : 2.2 * (1 - ((k - 0.85) / 0.15) ** 2);
+        TINT.multiply(tmpC.setRGB(1.25, 0.85, 1.7));
+      }
       baseE.set(e.lunge * 0.35, Math.PI / 2 - e.facing, 0); tmpQ.setFromEuler(baseE);
       baseM.compose(tmpP.set(e.x, e.y + lift, e.z), tmpQ, tmpS.set(s * sq, s / sq, s * sq));
       rigs[e.def.rig].add(e, t, TINT, baseM);
@@ -821,7 +828,7 @@
         E.aura.setMatrixAt(na++, tmpM.compose(tmpP.set(e.x, e.y + 0.08, e.z), tmpQ, tmpS.setScalar(e.r * 1.6)));
       }
       if ((e.elite || e.maxHp >= 60) && e.hp < e.maxHp && nb < 120) {
-        const w = Math.min(2.2, 0.9 + e.maxHp / 150), by = e.y + e.h + 0.55;
+        const w = Math.min(2.2, 0.9 + e.maxHp / 150), by = e.y + e.h + 0.55 + lift;
         E.barBg.setMatrixAt(nb, tmpM.compose(tmpS.set(e.x, by, e.z), camQ, tmpP.set(w + 0.08, 1, 1)));
         tmpS.set(-w / 2, 0, 0.01).applyQuaternion(camQ).add(tmpP.set(e.x, by, e.z));
         E.barFg.setMatrixAt(nb, tmpM.compose(tmpS, camQ, tmpP.set(w * Math.max(0, e.hp / e.maxHp), 1, 1)));

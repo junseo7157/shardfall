@@ -123,6 +123,10 @@
     notes: [['a', C(9, 24, 3.5) + C(22, 21, 3.5)], ['l', 'M12.5 24V7l13-3v17M12.5 11l13-3']],
     bell: [['a', 'M16 3c-5 0-8 4-8 9v7l-3 4h22l-3-4v-7c0-5-3-9-8-9z'], ['k', C(16, 26.5, 2.5)], ['w', 'M11 10c0-2 1-4 3-5-1 2-1 4-1 6z']],
     symphony: [['g', 'M16 3a13 13 0 1 1 0 26a13 13 0 1 1 0-26'], ['a', C(11, 20, 2.5) + C(21, 18, 2.5)], ['l', 'M13.5 20v-9l10-2v9']],
+    // the chronomancer's past self: a figure with its pale double a step behind
+    pastself: [['b', C(11, 9.5, 3.4) + 'M4 28c0-6.5 3-10.5 7-10.5s7 4 7 10.5z'], ['a', C(20, 10.5, 3.8) + 'M12.5 29.5c0-7 3.3-11 7.5-11s7.5 4 7.5 11z'], ['l', 'M1.5 13.5h3M1.5 18h2.5'], ['w', C(18.6, 9.2, 1.2)]],
+    // the gravitist's lift: a body hanging over three arrows pointing up from the ground
+    levitate: [['a', C(16, 9.5, 5.5)], ['w', C(14, 7.5, 1.6)], ['G', 'M8 27v-6M16 27v-5M24 27v-6'], ['a', 'M8 17.5l2.6 3.5H5.4zM16 18.5l2.6 3.5h-5.2zM24 17.5l2.6 3.5h-5.2z'], ['l', 'M3 29.5h26']],
     // the engineer's overclock: a gear struck by lightning
     overclock: [['b', 'M14 2h4l1 4 3 1.2 3.5-2.2 2.8 2.8-2.2 3.5 1.2 3 4 1v4l-4 1-1.2 3 2.2 3.5-2.8 2.8-3.5-2.2-3 1.2-1 4h-4l-1-4-3-1.2-3.5 2.2-2.8-2.8 2.2-3.5-1.2-3-4-1v-4l4-1 1.2-3-2.2-3.5 2.8-2.8 3.5 2.2 3-1.2z'], ['a', 'M18.5 5.5 10.5 17.5h5l-2.5 9 8.5-12h-5l2.5-9z'], ['w', 'M16.8 8.6 13.2 14h1.6z']],
     // melee cards: a wide arc over the wielder, a blade with a measure, a swing back and forth
