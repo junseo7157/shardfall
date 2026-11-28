@@ -77,7 +77,7 @@
           });
         } },
     ],
-    ult: { name: '망자의 문', icon: 'gate', desc: '조준한 곳에 거대한 뼈의 문을 세움: 6초 동안 해골 전사 10구가 줄지어 쏟아져 나와 적에게 달려들고, 문이 닫히는 순간 모은 영혼을 모두 터뜨려 6m를 휩쓰는 영혼 폭발(영혼 하나당 +15%)' },
+    ult: { name: '망자의 문', icon: 'gate', desc: '조준한 곳에 거대한 뼈의 문을 세움: 6초 동안 해골 전사 10구가 줄지어 쏟아져 나와 적에게 달려들고, 문이 닫히는 순간 모은 영혼을 모두 터뜨려 7m를 휩쓰는 영혼 폭발(영혼 하나당 +15%)' },
     // a soul for every death close by (the host counts them; the gauge reaches the player with its hero)
     onNearKill(h, e) {
       if ((h.res || 0) >= 10 || U.dist2(h.x, h.z, e.x, e.z) > NK_SOUL_R * NK_SOUL_R) return;
@@ -97,7 +97,7 @@
       }
       G.Enemies.later(6.2, () => {
         G.Net.vis('nkBurst', R1(p.x), R1(p.z), n);
-        C.forEachTarget(p.x, p.z, 6, (t) => { const [kx, kz] = outward(t, p.x, p.z); C.damage(t, 90 * (1 + 0.15 * n) * s.dmgMult, { kx, kz, knock: 14, source: 'ult', by: h }); });
+        C.forEachTarget(p.x, p.z, 7, (t) => { const [kx, kz] = outward(t, p.x, p.z); C.damage(t, 120 * (1 + 0.15 * n) * s.dmgMult, { kx, kz, knock: 14, source: 'ult', by: h }); });
       });
     },
     ultTick(h) { h.ultTick = 1; },
@@ -215,7 +215,7 @@
         s.atkCd = 0.75; s.atk = 0.3;
         if (G.auth()) {
           const st = o.stats, q = s.near;
-          C.damage(q, 14 * st.dmgMult * (s.ult ? 0.65 : st.lanceMult), { kx: q.x - s.x, kz: q.z - s.z, knock: 2.5, source: s.ult ? 'ult' : 'minion', by: o });
+          C.damage(q, 14 * st.dmgMult * (s.ult ? 0.7 : st.lanceMult), { kx: q.x - s.x, kz: q.z - s.z, knock: 2.5, source: s.ult ? 'ult' : 'minion', by: o });
         }
         if (near(s.x, s.z) > 0.45) G.Audio.play('boneHit');
       }
@@ -352,7 +352,8 @@
   V.nkGate = (id, x, z, a, dur, key) => { CL.addSummon('gate', { id: String(id), owner: String(key), x: +x || 0, z: +z || 0, a: +a || 0, dur: U.clamp(+dur || 6.5, 1, 10) }); };
   V.nkBurst = (x, z, n) => {
     const y = hy(x, z), k = 1 + U.clamp(+n || 0, 0, 10) * 0.08;
-    G.FX.explosion(x, y, z, 6 * k, 0x7adf4a, 0.6 * near(x, z));
+    // the blast reaches 7 m however many souls went in; souls only make it shake harder
+    G.FX.explosion(x, y, z, 7, 0x7adf4a, 0.6 * k * near(x, z));
     G.FX.pillar(x, z, 0x9fff6a, 80, 14);
     G.FX.burst(x, y + 1.5, z, { count: 60, color: 0xd8ffb0, intensity: 3, spread: 'ring', speed: [8, 18], life: [0.3, 0.7], size: [0.5, 0.04], drag: 2.5, up: 4 });
     G.Render.flash(x, y + 2, z, 0x7adf4a, 120, 0.5, 26);
@@ -438,14 +439,17 @@
   const GV_SHOT = { color: 0xd8a0ff };
 
   // the gravity orb rolls out slowly along a straight line, so every machine has it in the same place
+  // (how fast it rolls, how far past its body it pulls, how hard, how much it slows what it holds)
+  // (it used to roll at 9 m/s with a pull of 5 from 1.8 m past its body: everything walked out of it)
+  const GORB = (CL.GORB = { speed: 8, reach: 2.2, pull: 6, pullCh: 2.5, slow: 0.15, lead: 0, tick: 5 });
   SUM.gorb = {
     make(s) {
       const g = (s.mesh = new THREE.Group());
       s.core = addM(g, geo('goCore', () => new THREE.SphereGeometry(1, 16, 12)), mat('goBlack', () => new THREE.MeshBasicMaterial({ color: 0x0a0410 })), 0, 0, 0, false);
       s.halo = addM(g, geo('goHalo', () => new THREE.SphereGeometry(1, 16, 12)), ownMat(s, addMat(0x8a3ae8, 1.1, 0.3)), 0, 0, 0, false);
       s.disk = addM(g, geo('goDisk', () => new THREE.RingGeometry(1.2, 2, 40).rotateX(-Math.PI / 2)), ownMat(s, addMat(0xb070ff, 1.2, 0.45, THREE.DoubleSide)), 0, 0, 0, false);
-      s.r = (2.4 + s.ch * 2.2) * 0.5; // the visible body; it pulls from further out
-      s.len = 14; s.speed = 9;
+      s.r = (2.4 + s.ch * 2.2) * 0.5; // the visible body; it pulls from further out (GORB.reach)
+      s.len = 14; s.speed = GORB.speed;
       s.dur = s.len / s.speed + 0.35;
       s.tick = 0; s.pull = 0; s.boomed = false;
       s.px = s.x + Math.cos(s.a) * 1.2; s.pz = s.z + Math.sin(s.a) * 1.2;
@@ -462,7 +466,7 @@
       s.halo.scale.setScalar(s.r * (0.75 + Math.sin(t * 9) * 0.05) * sc);
       s.disk.scale.setScalar(s.r * 0.9 * sc);
       s.disk.rotation.y += dt * 5;
-      const R = s.r + 1.8;
+      const R = s.r + GORB.reach;
       for (let i = 0; i < 3; i++) {
         const a = Math.random() * TAU, rr = R * U.rand(0.8, 1.2);
         G.FX.P.emit(s.px + Math.cos(a) * rr, y + U.rand(-0.8, 0.8), s.pz + Math.sin(a) * rr, -Math.cos(a) * rr * 2.5 - Math.sin(a) * 3, 0, -Math.sin(a) * rr * 2.5 + Math.cos(a) * 3, 0.35, 0.35, 0.02, 2.4, 1.2, 3, 1, 0, 0);
@@ -474,17 +478,23 @@
         G.Audio.play('explode');
         if (G.auth()) {
           const st = o.stats, x0 = s.px, z0 = s.pz;
-          C.forEachTarget(x0, z0, s.r + 1.2, (q) => C.damage(q, (40 + 90 * s.ch) * st.lanceMult * st.dmgMult, { source: 'skill', by: o, kx: x0 - q.x, kz: z0 - q.z, knock: 4 }));
+          C.forEachTarget(x0, z0, s.r + 1.2, (q) => C.damage(q, (35 + 75 * s.ch) * st.lanceMult * st.dmgMult, { source: 'skill', by: o, kx: x0 - q.x, kz: z0 - q.z, knock: 4 }));
         }
       }
       if (!G.auth() || idle || s.t >= travel) return;
       s.pull -= dt;
-      if (s.pull <= 0) { s.pull = 0.12; C.forEachTarget(s.px, s.pz, R, (q) => pullIn(q, s.px, s.pz, 5)); }
+      if (s.pull <= 0) {
+        // drag toward the orb (or a point just ahead of it), and slow whatever is in the well so the
+        // pull wins over walking
+        s.pull = 0.12;
+        const lx = s.px + Math.cos(s.a) * GORB.lead, lz = s.pz + Math.sin(s.a) * GORB.lead, f = GORB.pull + GORB.pullCh * s.ch;
+        C.forEachTarget(s.px, s.pz, R, (q) => { pullIn(q, lx, lz, f); if (GORB.slow > 0 && !q.isBoss) slow(q, GORB.slow, 0.25); });
+      }
       s.tick -= dt;
       if (s.tick <= 0) {
         s.tick = 0.3;
         const st = o.stats;
-        C.forEachTarget(s.px, s.pz, s.r + 0.8, (q) => C.damage(q, (7 + 7 * s.ch) * st.lanceMult * st.dmgMult, { canCrit: false, source: 'skill', by: o }));
+        C.forEachTarget(s.px, s.pz, s.r + 0.8, (q) => C.damage(q, GORB.tick * (1 + s.ch) * st.lanceMult * st.dmgMult, { canCrit: false, source: 'skill', by: o }));
       }
     },
     end(s) { dropAll(s); },
@@ -553,7 +563,7 @@
         }
         if (G.auth()) {
           const st = o.stats;
-          if (B) C.forEachTarget(s.x, s.z, 10, (q) => { const [kx, kz] = outward(q, s.x, s.z); C.damage(q, 130 * st.dmgMult, { kx, kz, knock: 24, source: 'ult', by: o }); });
+          if (B) C.forEachTarget(s.x, s.z, 10, (q) => { const [kx, kz] = outward(q, s.x, s.z); C.damage(q, 150 * st.dmgMult, { kx, kz, knock: 24, source: 'ult', by: o }); });
           else C.forEachTarget(s.x, s.z, R, (q) => C.damage(q, 50 * st.meteorMult * st.dmgMult, { source: 'skill', by: o }));
         }
       }
@@ -568,7 +578,7 @@
       if (s.tick <= 0) {
         s.tick = 0.25;
         const st = o.stats;
-        C.forEachTarget(s.x, s.z, R, (q) => C.damage(q, (B ? 7 * (q.isBoss || q.elite ? 1.5 : 1) : 10 * st.meteorMult) * st.dmgMult, { canCrit: false, source: B ? 'ult' : 'skill', by: o }));
+        C.forEachTarget(s.x, s.z, R, (q) => C.damage(q, (B ? 8 * (q.isBoss || q.elite ? 1.5 : 1) : 10 * st.meteorMult) * st.dmgMult, { canCrit: false, source: B ? 'ult' : 'skill', by: o }));
       }
     },
     end(s) { dropAll(s); },
@@ -604,7 +614,7 @@
         view: (h) => (h.form === 1 ? DR_BEAR_S3 : null),
         use(h, a) { if ((a.ch || 0) >= 0.5) bearQuake(h, a); else grove(h, a); } },
     ],
-    ult: { name: '세계수 강림', icon: 'worldtree', desc: '그 자리에 8초 동안 거대한 세계수가 솟아남: 솟는 순간 9m 안의 적을 뿌리로 휘감아 2초 묶고 피해. 나무 그늘(9m) 안의 동료는 초당 최대 체력 1.5% 회복과 주는 피해 +15%, 적은 40% 느려지고 매초 가시 뿌리 둘이 적을 꿰뚫음' },
+    ult: { name: '세계수 강림', icon: 'worldtree', desc: '그 자리에 8초 동안 거대한 세계수가 솟아남: 솟는 순간 9m 안의 적을 뿌리로 휘감아 2초 묶고 피해. 나무 그늘(9m) 안의 동료는 초당 최대 체력 2% 회복과 주는 피해 +15%, 적은 40% 느려지고 매초 가시 뿌리 둘이 적을 꿰뚫음' },
     // which form cast it travels with the cast (so the host runs the same one); the change carries the new form
     castArgs(h, i, a) { a.ch = i === 2 ? (h.form ? 0 : 1) : h.form ? 1 : 0; },
     flags: (h) => (h.form ? 1 : 0),
@@ -619,7 +629,7 @@
       const s = h.stats, x = R1(h.x), z = R1(h.z);
       G.Net.vis('ultFx', 'druid', x, z, h.key);
       G.Net.vis('drTree', uid(h), x, z, 9, 8, h.key);
-      C.forEachTarget(x, z, 9, (t) => { C.damage(t, 60 * s.dmgMult, { source: 'ult', by: h }); if (t.isBoss) slow(t, 0.5, 2); else if (t.rootFor) t.rootFor(2); });
+      C.forEachTarget(x, z, 9, (t) => { C.damage(t, 75 * s.dmgMult, { source: 'ult', by: h }); if (t.isBoss) slow(t, 0.5, 2); else if (t.rootFor) t.rootFor(2); });
     },
     ultTick(h) { h.ultTick = 1; },
     model(h, add, M) {
@@ -816,7 +826,7 @@
       s.tick -= dt;
       if (s.tick <= 0) {
         s.tick = 0.5;
-        for (const h of HS.list) if (h.alive && U.dist2(h.x, h.z, s.x, s.z) < s.r * s.r) h.heal(h.stats.maxHp * 0.0075, true, o);
+        for (const h of HS.list) if (h.alive && U.dist2(h.x, h.z, s.x, s.z) < s.r * s.r) h.heal(h.stats.maxHp * 0.01, true, o);
       }
       s.thorn -= dt;
       if (s.thorn > 0 || idle) return;
@@ -826,7 +836,7 @@
       for (let k = 0; k < 2 && list.length; k++) {
         const q = list.splice(Math.floor(Math.random() * list.length), 1)[0];
         G.Net.vis('drRoot', R1(q.x), R1(q.z));
-        C.damage(q, 45 * st.dmgMult, { source: 'ult', by: o, knock: 3, kx: q.x - s.x, kz: q.z - s.z });
+        C.damage(q, 52 * st.dmgMult, { source: 'ult', by: o, knock: 3, kx: q.x - s.x, kz: q.z - s.z });
       }
     },
     end(s) {
@@ -846,7 +856,7 @@
   // ======================================================================
   // 14. blademaster: momentum, and the edge
   // ======================================================================
-  const BM = { T0: 0.08, STEP: 0.16 };
+  const BM = { T0: 0.08, STEP: 0.16, R: 4.5 };
   BM.SHEATH = BM.T0 + 3 * BM.STEP + 0.45;
   const BM_BIG = { dmgK: 1.5, rK: 1.15, arcK: 1.25, knockK: 2.2, color: 0xffffff, sfx: 'unsheathe' };
   def({
@@ -885,7 +895,7 @@
           if (h.auth) windBlade(h, h.x, h.z, a.ang, h.res || 0, false);
         } },
     ],
-    ult: { name: '삼연 일섬', icon: 'triple', desc: '눈에 보이지 않는 속도로 세 번 가르며 내달림(그동안 무적): 지나간 자리의 적을 베고, 마지막 일섬은 반드시 치명타. 칼을 거두는 순간 베인 적 모두에게 한 번 더 피해. 기세가 많을수록 강함' },
+    ult: { name: '삼연 일섬', icon: 'triple', desc: '눈에 보이지 않는 속도로 조준한 곳을 세 방향에서 가로지르며 벰(그동안 무적): 세 일섬이 한가운데서 별 모양으로 겹쳐 그 자리의 적은 세 번 모두 맞고, 마지막 일섬은 반드시 치명타. 칼을 거두는 순간 베인 적 모두에게 한 번 더 피해. 기세가 많을수록 강함' },
     dealtK: (h) => 1 + 0.025 * (h.res || 0),
     // every third swing is the big one
     swingMod(h) { h.combo = ((h.combo || 0) + 1) % 3; h.swingN = (h.swingN || 0) + 1; return h.combo === 0 ? BM_BIG : null; },
@@ -914,17 +924,21 @@
     },
     immune: (h) => h.ultT > 0,
     hidden: (h) => h.hideT > 0,
+    // three cuts that all cross the aimed spot, 60° apart like an asterisk: the first runs in from
+    // where the blademaster stands, then it flickers 4.5 m round to the start of each next one.
+    // Whatever stands in the middle takes all three (pts: start and end of each cut)
     ultStart(h) {
-      const s = h.stats, a0 = Math.atan2(h.aimZ - h.z, h.aimX - h.x), pts = [R1(h.x), R1(h.z)];
-      let x = h.x, z = h.z;
-      for (const [a, L] of [[a0, 9], [a0 + Math.PI * 0.72, 7], [a0, 9]]) { const p = reach(x, z, a, L, 0.55); x = p[0]; z = p[1]; pts.push(R1(x), R1(z)); }
+      const s = h.stats, p = ultSpot(h, 8, 2.5), a0 = Math.atan2(p.z - h.z, p.x - h.x), out = (a) => reach(p.x, p.z, a, BM.R, 0.55);
+      const segs = [[h.x, h.z, ...out(a0)]];
+      for (const k of [1, 2]) { const a = a0 + k * (TAU / 3); segs.push([...out(a + Math.PI), ...out(a)]); }
+      const pts = segs.flat().map(R1);
       G.Net.vis('ultFx', 'blademaster', pts[0], pts[1], h.key);
       G.Net.vis('bmTriple', pts, h.key);
       const hit = new Set();
       for (let i = 0; i < 3; i++) {
         G.Enemies.later(BM.T0 + (i + 1) * BM.STEP, () => {
-          const ax = pts[i * 2], az = pts[i * 2 + 1], bx = pts[i * 2 + 2], bz = pts[i * 2 + 3], a = Math.atan2(bz - az, bx - ax), len = Math.max(0.5, U.dist(ax, az, bx, bz));
-          C.line(ax, az, a, len + 0.8, 3.2, (t) => { hit.add(t); C.damage(t, 90 * s.dmgMult, { crit: i === 2, kx: -Math.sin(a), kz: Math.cos(a), knock: 6, source: 'ult', by: h }); });
+          const ax = pts[i * 4], az = pts[i * 4 + 1], bx = pts[i * 4 + 2], bz = pts[i * 4 + 3], a = Math.atan2(bz - az, bx - ax), len = Math.max(0.5, U.dist(ax, az, bx, bz));
+          C.line(ax, az, a, len + 0.8, 2.2, (t) => { hit.add(t); C.damage(t, 85 * s.dmgMult, { crit: i === 2, kx: -Math.sin(a), kz: Math.cos(a), knock: 6, source: 'ult', by: h }); });
         });
       }
       G.Enemies.later(BM.SHEATH, () => {
@@ -932,7 +946,7 @@
         for (const t of hit) {
           if (!t.alive) continue;
           if (n++ < 12) G.Net.vis('bmSever', R1(t.x), R1(t.z));
-          C.damage(t, 60 * s.dmgMult, { source: 'ult', cls: 'crit', by: h });
+          C.damage(t, 50 * s.dmgMult, { source: 'ult', cls: 'crit', by: h });
         }
       });
     },
@@ -998,13 +1012,15 @@
     if (h && !G.auth()) windBlade(h, x, z, a, U.clamp(res | 0, 0, 10), true);
   };
   V.bmTriple = (pts, key) => {
-    if (!Array.isArray(pts) || pts.length < 8) return;
-    const p = pts.slice(0, 8).map((v) => +v || 0), h = ownerOf(key);
+    if (!Array.isArray(pts) || pts.length < 12) return;
+    const p = pts.slice(0, 12).map((v) => +v || 0), h = ownerOf(key);
     if (h) h.hideT = BM.T0 + 3 * BM.STEP + 0.05;
     G.Audio.play('iai');
     for (let i = 0; i < 3; i++) {
       later(BM.T0 + i * BM.STEP, () => {
-        const ax = p[i * 2], az = p[i * 2 + 1], bx = p[i * 2 + 2], bz = p[i * 2 + 3], a = Math.atan2(bz - az, bx - ax), len = Math.max(0.5, U.dist(ax, az, bx, bz)), y = hy(ax, az) + 1.1;
+        const ax = p[i * 4], az = p[i * 4 + 1], bx = p[i * 4 + 2], bz = p[i * 4 + 3], a = Math.atan2(bz - az, bx - ax), len = Math.max(0.5, U.dist(ax, az, bx, bz)), y = hy(ax, az) + 1.1;
+        // the flicker round the rim from the last cut's end to this one's start
+        if (i > 0) for (let k = 0; k < 5; k++) { const q = k / 5; G.FX.trail(U.lerp(p[i * 4 - 2], ax, q), y, U.lerp(p[i * 4 - 1], az, q), 0xffe0b0, 0.5, 0.2, 1.6); }
         G.FX.beam(ax, y, az, a, len, i === 2 ? 1.1 : 0.75, i === 2 ? 0xffffff : 0xffd8a0, BM.SHEATH - BM.T0 - i * BM.STEP + 0.1);
         for (let k = 0; k < 8; k++) { const q = k / 8; G.FX.trail(U.lerp(ax, bx, q), y, U.lerp(az, bz, q), 0xffb060, 0.9, 0.35, 2.4); }
         G.FX.burst(bx, y, bz, { count: 14, color: 0xfff0d0, intensity: 3, speed: [4, 10], life: [0.12, 0.25], size: [0.4, 0.02] });
@@ -1014,7 +1030,7 @@
       });
     }
     later(BM.SHEATH, () => {
-      const x = p[6], z = p[7], y = hy(x, z);
+      const x = p[10], z = p[11], y = hy(x, z);
       G.FX.ring(x, y + 0.4, z, 0.3, 3, 0.3, 0xffe0b0, 3);
       G.Render.flash(x, y + 1.5, z, 0xffffff, 100, 0.3, 18);
       G.Audio.play('clink'); G.Audio.play('iai');
@@ -1112,7 +1128,7 @@
       h.ultTick = 1.2;
       const s = h.stats, last = h.ultT < 1.25;
       G.Net.vis('bdPulse', R1(h.x), R1(h.z), last ? 1 : 0, h.key);
-      C.forEachTarget(h.x, h.z, last ? 11 : 9, (t) => { const [kx, kz] = outward(t, h.x, h.z); C.damage(t, (last ? 120 : 45) * s.dmgMult, { kx, kz, knock: last ? 16 : 8, source: 'ult', by: h }); });
+      C.forEachTarget(h.x, h.z, last ? 11 : 9, (t) => { const [kx, kz] = outward(t, h.x, h.z); C.damage(t, (last ? 140 : 52) * s.dmgMult, { kx, kz, knock: last ? 16 : 8, source: 'ult', by: h }); });
     },
     model(h, add, M) {
       const felt = skin(h, 0x7a3a5a, { roughness: 0.85 }), wood = skin(h, 0xb07a4a, { roughness: 0.6 }), plume = skin(h, 0xffe0f0, { roughness: 0.7, side: THREE.DoubleSide });

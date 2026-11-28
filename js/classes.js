@@ -211,7 +211,7 @@
       // the blow that raises it throws everything out past the walls
       C.forEachTarget(h.x, h.z, r, (t) => {
         const dx = t.x - h.x, dz = t.z - h.z, d = Math.hypot(dx, dz) || 1;
-        C.damage(t, 70 * s.dmgMult, { kx: dx / d, kz: dz / d, knock: 20, source: 'ult', by: h });
+        C.damage(t, 95 * s.dmgMult, { kx: dx / d, kz: dz / d, knock: 20, source: 'ult', by: h });
         stun(t, 1.2);
       });
     },
@@ -469,7 +469,7 @@
           } });
         } },
     ],
-    ult: { name: '천사 강림', icon: 'angel', desc: '거대한 빛의 천사가 내려와 6초 동안 곁을 지킴: 쓰러진 동료는 그 자리에서 체력 40%로 일어나고, 모두 체력 25% 회복과 1.5초 무적. 천사는 0.7초마다 가장 강한 적 둘에게 심판의 빛기둥을 내리꽂고 가장 다친 동료를 치유. 그동안 모두의 피해 +15%' },
+    ult: { name: '천사 강림', icon: 'angel', desc: '거대한 빛의 천사가 내려와 6초 동안 곁을 지킴: 쓰러진 동료는 그 자리에서 체력 40%로 일어나고, 모두 체력 25% 회복과 1.5초 무적. 천사는 0.7초마다 가장 강한 적 셋에게 심판의 빛기둥을 내리꽂고 가장 다친 동료를 치유. 그동안 모두의 피해 +20%' },
     channel(h, i, dt) {
       const bt = beamTarget(h), s = h.stats;
       const tx = bt ? bt.t.x : h.x + Math.cos(h.facing) * 16, tz = bt ? bt.t.z : h.z + Math.sin(h.facing) * 16;
@@ -497,7 +497,7 @@
       if (back.length) G.Net.vis('toast', back.join(', ') + '님이 천사의 빛 속에서 일어났어요', 'good');
       h.ultTick = 0.5;
     },
-    // the angel's judgement: the two strongest enemies near, and a touch of light on whoever is hurt most
+    // the angel's judgement: the three strongest enemies near, and a touch of light on whoever is hurt most
     ultTick(h) {
       h.ultTick = 0.7;
       const s = h.stats, list = [];
@@ -506,12 +506,12 @@
       list.sort((a, b) => score(b) - score(a));
       const done = new Set();
       for (const t of list) {
-        if (done.size >= 2) break;
+        if (done.size >= 3) break;
         const key = t.boss || t;
         if (done.has(key)) continue;
         done.add(key);
         G.Net.vis('clSmite', R1(t.x), R1(t.z));
-        C.damage(t, 55 * s.dmgMult, { source: 'ult', cls: 'burn', by: h });
+        C.damage(t, 65 * s.dmgMult, { source: 'ult', cls: 'burn', by: h });
         slow(t, 0.4, 1);
       }
       let low = null, lk = 0.98;
@@ -520,7 +520,7 @@
         const k = o.hp / Math.max(1, o.stats.maxHp);
         if (k < lk) { lk = k; low = o; }
       }
-      if (low) { low.heal(low.stats.maxHp * 0.04, false, h); G.Net.vis('ring', R1(low.x), R1(low.z), 0.3, 1.6, 0.4, 0xfff0b0); }
+      if (low) { low.heal(low.stats.maxHp * 0.05, false, h); G.Net.vis('ring', R1(low.x), R1(low.z), 0.3, 1.6, 0.4, 0xfff0b0); }
     },
     model(h, add, M) {
       add(new THREE.TorusGeometry(0.3, 0.035, 8, 26), M.glow, 0, 2.2, 0).rotation.x = Math.PI / 2;
@@ -644,11 +644,11 @@
         C.forEachTarget(h.x, h.z, r, (t) => {
           if (!inCone(h, t, a, 1.75)) return;
           const dx = t.x - h.x, dz = t.z - h.z, d = Math.hypot(dx, dz) || 1;
-          C.damage(t, (80 + 110 * k) * s.dmgMult, { kx: dx / d, kz: dz / d, knock: 16, source: 'ult', by: h });
+          C.damage(t, (90 + 125 * k) * s.dmgMult, { kx: dx / d, kz: dz / d, knock: 16, source: 'ult', by: h });
           stun(t, 1);
         });
         const x0 = h.x, z0 = h.z;
-        G.Enemies.later(0.15, () => C.line(x0, z0, a, 18, 4.5, (t) => C.damage(t, (35 + 50 * k) * s.dmgMult, { kx: Math.cos(a), kz: Math.sin(a), knock: 10, source: 'ult', cls: 'burn', by: h })));
+        G.Enemies.later(0.15, () => C.line(x0, z0, a, 18, 4.5, (t) => C.damage(t, (40 + 56 * k) * s.dmgMult, { kx: Math.cos(a), kz: Math.sin(a), knock: 10, source: 'ult', cls: 'burn', by: h })));
       });
     },
     ultTick(h) { h.ultTick = 1; },
@@ -838,13 +838,13 @@
       for (let k = 0; k < 5; k++) {
         const ax = pts[k * 2], az = pts[k * 2 + 1], bx = pts[k * 2 + 2], bz = pts[k * 2 + 3];
         const ang = Math.atan2(bz - az, bx - ax), len = U.dist(ax, az, bx, bz);
-        G.Enemies.later(STAR_T0 + (k + 1) * STAR_STEP, () => C.line(ax, az, ang, len, 3.2, (t) => C.damage(t, 32 * s.dmgMult, { source: 'ult', by: h, kx: Math.cos(ang + 1.57), kz: Math.sin(ang + 1.57), knock: 4 })));
+        G.Enemies.later(STAR_T0 + (k + 1) * STAR_STEP, () => C.line(ax, az, ang, len, 3.2, (t) => C.damage(t, 34 * s.dmgMult, { source: 'ult', by: h, kx: Math.cos(ang + 1.57), kz: Math.sin(ang + 1.57), knock: 4 })));
       }
       // the star goes off: everything inside, and whoever it leaves nearly dead is finished
       G.Enemies.later(STAR_BOOM, () => {
         const list = [];
         C.forEachTarget(p.x, p.z, R + 1, (t) => list.push(t));
-        for (const t of list) C.damage(t, 90 * s.dmgMult, { source: 'ult', cls: 'crit', by: h });
+        for (const t of list) C.damage(t, 95 * s.dmgMult, { source: 'ult', cls: 'crit', by: h });
         for (const t of list) {
           if (!t.alive || t.isBoss || hpFrac(t) >= 0.2) continue;
           G.Net.vis('asExec', R1(t.x), R1(t.z));
@@ -853,7 +853,7 @@
         // the coup de grâce on whoever is strongest
         let best = null, bk = -1;
         C.forEachTarget(p.x, p.z, R + 2, (t) => { const k = (t.isBoss ? 1e7 : 0) + (t.elite ? 1e5 : 0) + (t.hp || 0); if (k > bk) { bk = k; best = t; } });
-        if (best) { G.Net.vis('asCut', R1(p.x), R1(p.z), R1(best.x), R1(best.z)); C.damage(best, 130 * s.dmgMult, { crit: true, source: 'ult', by: h }); }
+        if (best) { G.Net.vis('asCut', R1(p.x), R1(p.z), R1(best.x), R1(best.z)); C.damage(best, 138 * s.dmgMult, { crit: true, source: 'ult', by: h }); }
       });
     },
     ultTick(h) { h.ultTick = 1; },
@@ -944,7 +944,7 @@
           G.Net.vis('chHaste', R1(dur), ...keys);
         } },
     ],
-    ult: { name: '멈춘 시간', icon: 'clock', desc: '발밑에 거대한 시계가 펼쳐지며 4초 동안 모든 적과 적 탄이 멈춤(보스는 크게 느려짐). 멈춘 동안 적이 받은 피해의 60%가 쌓여 있다가 시간이 다시 흐르는 순간 한꺼번에 터지고, 시계 둘레 12m에 충격파' },
+    ult: { name: '멈춘 시간', icon: 'clock', desc: '발밑에 거대한 시계가 펼쳐지며 4초 동안 모든 적과 적 탄이 멈춤(보스는 크게 느려짐). 멈춘 동안 적이 받은 피해의 75%가 쌓여 있다가 시간이 다시 흐르는 순간 한꺼번에 터지고, 시계 둘레 12m에 충격파' },
     ultStart(h) {
       G.Net.vis('ultFx', 'chrono', R1(h.x), R1(h.z), h.key);
       G.Net.vis('chStop', 4, R1(h.x), R1(h.z), h.key);
@@ -998,7 +998,7 @@
     id: 'gunslinger', tier: 2, name: '총잡이', role: '여섯 발로 승부하는 무법자', emblem: 'gun', css: '#e8c07a', energy: 0xffc46a, ultDur: 1.6, orb: false, ammo: 6,
     trait: { name: '마지막 한 발', desc: '탄창의 마지막 한 발은 피해 2배에 반드시 치명타. 재장전이 끝나면 1.5초 동안 이동 속도 +20%.' },
     basic: { name: '리볼버', icon: 'gun', desc: '여섯 발을 다 쏘면 재장전(약 1.1초). 남은 탄은 저절로 채워지지 않음', spread: 0.05, sfx: 'gun' },
-    stats(s) { s.maxHp = 100; s.speed *= 1.05; s.dmg = 25; s.fireRate = 5.2; s.projSpeed = 64; s.projLife = 0.5; s.projSize = 0.8; s.crit += 0.08; },
+    stats(s) { s.maxHp = 100; s.speed *= 1.05; s.dmg = 25; s.fireRate = 4.9; s.projSpeed = 64; s.projLife = 0.5; s.projSize = 0.8; s.crit += 0.08; },
     skills: [
       { name: '패닝', icon: 'fan', kind: 'aim', cd: 6, line: () => ({ len: 20, w: 7 }),
         desc: '남은 총알을 조준한 쪽 부채꼴로 순식간에 모두 쏟아붓고 바로 재장전(한 발당 피해 +30%)',
@@ -1091,7 +1091,7 @@
             if (cur.boss) for (const q of cur.boss.targets) hit.add(q);
             shots.set(cur.boss || cur, (shots.get(cur.boss || cur) || 0) + 1);
             pts.push(R1(cur.x), R1(cur.z));
-            C.damage(cur, s.dmg * s.dmgMult * 1.6 * (1 + 0.3 * n), { crit: true, source: 'ult', by: h, kx: cur.x - c[0], kz: cur.z - c[1], knock: 5 });
+            C.damage(cur, s.dmg * s.dmgMult * 1.7 * (1 + 0.3 * n), { crit: true, source: 'ult', by: h, kx: cur.x - c[0], kz: cur.z - c[1], knock: 5 });
             cur = C.nearest(cur.x, cur.z, 9, hit);
           }
           G.Net.vis('gsRico', pts);
@@ -1252,7 +1252,7 @@
     else if (id === 'berserker') m *= 1 + 0.5 * lost(h);
     else if (id === 'assassin' && hpFrac(t) < 0.3) m *= t.isBoss ? 1.25 : 1.5;
     if (h.cls.dealtK) m *= h.cls.dealtK(h, t, o || NOOPT);
-    for (const q of HS.list) if (q.cls.id === 'cleric' && q.ultT > 0) { m *= 1.15; break; }
+    for (const q of HS.list) if (q.cls.id === 'cleric' && q.ultT > 0) { m *= 1.2; break; }
     for (const s of CL.summons) if (s.buff && !s.dead && U.dist2(s.x, s.z, h.x, h.z) < s.r * s.r) { m *= s.buff; break; }
     return m;
   };
@@ -2078,11 +2078,11 @@
     let n = 0;
     for (const [t, amt] of owed) {
       if (n++ < 14) G.Net.vis('chDebt', R1(t.x), R1(t.z));
-      C.damage(t, amt * 0.6, { canCrit: false, source: 'ult', cls: 'chain', by: h });
+      C.damage(t, amt * 0.75, { canCrit: false, source: 'ult', cls: 'chain', by: h });
     }
     if (at) C.forEachTarget(at.x, at.z, 12, (t) => {
       const dx = t.x - at.x, dz = t.z - at.z, d = Math.hypot(dx, dz) || 1;
-      C.damage(t, 60 * s.dmgMult, { canCrit: false, kx: dx / d, kz: dz / d, knock: 10, source: 'ult', by: h });
+      C.damage(t, 85 * s.dmgMult, { canCrit: false, kx: dx / d, kz: dz / d, knock: 10, source: 'ult', by: h });
     });
   }
 
@@ -2162,7 +2162,7 @@
           const st = o.stats;
           C.forEachTarget(s.x, s.z, 6.5, (q) => {
             const [kx, kz] = outward(q, s.x, s.z);
-            C.damage(q, 110 * st.dmgMult, { kx, kz, knock: 14, source: 'ult', by: o });
+            C.damage(q, 130 * st.dmgMult, { kx, kz, knock: 14, source: 'ult', by: o });
             stun(q, 1.2);
           });
         }
@@ -2183,7 +2183,7 @@
           G.Audio.play('shatter');
           if (G.auth()) {
             const st = o.stats;
-            C.forEachTarget(s.x, s.z, 7, (q) => { const [kx, kz] = outward(q, s.x, s.z); C.damage(q, 90 * st.dmgMult, { kx, kz, knock: 12, source: 'ult', by: o }); });
+            C.forEachTarget(s.x, s.z, 7, (q) => { const [kx, kz] = outward(q, s.x, s.z); C.damage(q, 105 * st.dmgMult, { kx, kz, knock: 12, source: 'ult', by: o }); });
           }
         }
         g.scale.setScalar(Math.max(0.01, (s.dur - s.t) / 0.4));
@@ -2199,7 +2199,7 @@
         ex.add(q);
         if (q.boss) for (const b of q.boss.targets) ex.add(b);
         const a = Math.atan2(q.z - s.z, q.x - s.x);
-        G.Proj.spawnPlayer({ x: s.x + Math.cos(a) * 1.3, z: s.z + Math.sin(a) * 1.3, y: s.y + 2.6, angle: a, speed: 30, life: 0.65, dmg: 16 * st.dmgMult,
+        G.Proj.spawnPlayer({ x: s.x + Math.cos(a) * 1.3, z: s.z + Math.sin(a) * 1.3, y: s.y + 2.6, angle: a, speed: 30, life: 0.65, dmg: 19 * st.dmgMult,
           size: 1.1, homing: 2, color: 0xbfe0ff, source: 'ult', by: o, cos: !G.auth() });
       }
       if (ex.size) {
@@ -2268,7 +2268,7 @@
           C.forEachTarget(s.x, s.z, s.r + 3.5, (q) => {
             if (U.dist(q.x, q.z, s.x, s.z) < s.r - 1.5) return;
             const [kx, kz] = outward(q, s.x, s.z);
-            C.damage(q, 110 * st.dmgMult, { kx, kz, knock: 10, source: 'ult', by: o });
+            C.damage(q, 145 * st.dmgMult, { kx, kz, knock: 10, source: 'ult', by: o });
             stun(q, 1);
           });
         }
@@ -2284,8 +2284,8 @@
       if (s.tick > 0) return;
       s.tick = 0.5;
       const st = o.stats;
-      for (const h of HS.list) if (h.alive && U.dist2(h.x, h.z, s.x, s.z) < s.r * s.r) h.heal(h.stats.maxHp * 0.01, true, o);
-      C.forEachTarget(s.x, s.z, s.r + 1.2, (q) => { if (U.dist(q.x, q.z, s.x, s.z) > s.r - 1.2) C.damage(q, 10 * st.dmgMult, { canCrit: false, source: 'ult', by: o }); });
+      for (const h of HS.list) if (h.alive && U.dist2(h.x, h.z, s.x, s.z) < s.r * s.r) h.heal(h.stats.maxHp * 0.015, true, o);
+      C.forEachTarget(s.x, s.z, s.r + 1.2, (q) => { if (U.dist(q.x, q.z, s.x, s.z) > s.r - 1.2) C.damage(q, 14 * st.dmgMult, { canCrit: false, source: 'ult', by: o }); });
     },
     end(s) { dropAll(s); },
   };
@@ -2340,7 +2340,7 @@
             if (near(s.x, s.z) > 0.3) G.Audio.play('hawk');
             if (G.auth()) {
               const st = o.stats;
-              C.line(s.x - ca * L, s.z - sa * L, a, L * 2, 4.5, (q2) => { C.damage(q2, 45 * st.dmgMult, { source: 'ult', by: o, kx: ca, kz: sa, knock: 3 }); markEnemy(q2, 4, 1); });
+              C.line(s.x - ca * L, s.z - sa * L, a, L * 2, 4.5, (q2) => { C.damage(q2, 47 * st.dmgMult, { source: 'ult', by: o, kx: ca, kz: sa, knock: 3 }); markEnemy(q2, 4, 1); });
             }
           }
         } else {
@@ -2377,8 +2377,8 @@
           s.bird.visible = false;
           if (G.auth()) {
             const st = o.stats, q = s.prey;
-            if (q && q.alive) { C.damage(q, 300 * st.dmgMult, { source: 'ult', by: o, kx: q.x - s.x, kz: q.z - s.z, knock: 8 }); stun(q, 1.5); markEnemy(q, 4, 1); }
-            C.forEachTarget(ux, uz, 3, (q2) => { if (q2 === q) return; const [kx, kz] = outward(q2, ux, uz); C.damage(q2, 60 * st.dmgMult, { kx, kz, knock: 8, source: 'ult', by: o }); });
+            if (q && q.alive) { C.damage(q, 315 * st.dmgMult, { source: 'ult', by: o, kx: q.x - s.x, kz: q.z - s.z, knock: 8 }); stun(q, 1.5); markEnemy(q, 4, 1); }
+            C.forEachTarget(ux, uz, 3, (q2) => { if (q2 === q) return; const [kx, kz] = outward(q2, ux, uz); C.damage(q2, 63 * st.dmgMult, { kx, kz, knock: 8, source: 'ult', by: o }); });
           }
         }
       }
@@ -2466,8 +2466,8 @@
         const st = o.stats;
         G.Enemies.later(0.3, () => C.forEachTarget(bx, bz, 2.6, (q) => {
           const [kx, kz] = outward(q, bx, bz);
-          C.damage(q, 24 * st.dmgMult, { canCrit: false, source: 'ult', cls: 'burn', by: o, kx, kz, knock: 4 });
-          if (q.applyStatus) q.applyStatus('burn', 6, 3);
+          C.damage(q, 28 * st.dmgMult, { canCrit: false, source: 'ult', cls: 'burn', by: o, kx, kz, knock: 4 });
+          if (q.applyStatus) q.applyStatus('burn', 7, 3);
         }));
       }
       // down into the middle of it all
@@ -2486,11 +2486,11 @@
           const st = o.stats, x0 = s.x, z0 = s.z;
           C.forEachTarget(x0, z0, 7, (q) => {
             const [kx, kz] = outward(q, x0, z0);
-            C.damage(q, 75 * st.dmgMult, { kx, kz, knock: 12, source: 'ult', cls: 'burn', by: o });
+            C.damage(q, 100 * st.dmgMult, { kx, kz, knock: 12, source: 'ult', cls: 'burn', by: o });
             if (q.applyStatus) q.applyStatus('burn', 7, 4);
           });
           CL.zones.push({ x: x0, z: z0, r: 5.5, t: 4, every: 0.4, tick: 0.3, by: o, fn(zn) {
-            C.forEachTarget(zn.x, zn.z, zn.r, (q) => { C.damage(q, 4 * st.dmgMult, { canCrit: false, source: 'zone', cls: 'burn', by: o }); if (q.applyStatus) q.applyStatus('burn', 4, 2); });
+            C.forEachTarget(zn.x, zn.z, zn.r, (q) => { C.damage(q, 5 * st.dmgMult, { canCrit: false, source: 'zone', cls: 'burn', by: o }); if (q.applyStatus) q.applyStatus('burn', 4, 2); });
           } });
         }
       }
@@ -2677,7 +2677,7 @@
         G.Audio.play('explode', { big: true });
         if (G.auth()) {
           const st = o.stats, x0 = s.px, z0 = s.pz;
-          C.forEachTarget(x0, z0, 5, (q) => { const [kx, kz] = outward(q, x0, z0); C.damage(q, 100 * st.dmgMult, { kx, kz, knock: 14, source: 'ult', by: o }); });
+          C.forEachTarget(x0, z0, 5, (q) => { const [kx, kz] = outward(q, x0, z0); C.damage(q, 120 * st.dmgMult, { kx, kz, knock: 14, source: 'ult', by: o }); });
         }
       }
       if (!G.auth() || idle || s.t >= end) return;
@@ -2686,7 +2686,7 @@
       s.tick = 0.25;
       const st = o.stats;
       C.forEachTarget(s.px, s.pz, 2.4, (q) => {
-        C.damage(q, 10 * st.dmgMult * (q.isBoss || q.elite ? 2.5 : 1), { source: 'ult', cls: 'chain', by: o });
+        C.damage(q, 11 * st.dmgMult * (q.isBoss || q.elite ? 2.5 : 1), { source: 'ult', cls: 'chain', by: o });
         slow(q, 0.3, 0.4);
       });
     },
