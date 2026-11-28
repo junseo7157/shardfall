@@ -902,20 +902,44 @@
   // ======================================================================
   const BM = { T0: 0.08, STEP: 0.16, R: 4.5 };
   BM.SHEATH = BM.T0 + 3 * BM.STEP + 0.45;
-  // the three-beat chain of the basic attack: a long narrow thrust, a short wide sweep, then a full
-  // turn that cuts everything around (the arc is capped at a whole circle). 1.5 s without a swing
-  // starts it over from the thrust
-  const BM_CHAIN = [
-    { rK: 1.25, arcK: 0.55, dmgK: 1, knockK: 0.6, thrust: true, sfx: 'knife', color: 0xffe8c8 },
-    { rK: 0.82, arcK: 1.95, dmgK: 0.9, knockK: 1.3 },
-    { rK: 1, arcK: 5, dmgK: 1.35, knockK: 2.2, color: 0xffffff, sfx: 'unsheathe', spin: true },
-  ];
-  const BM_SPIN = 0.24, BM_RESET = 1.5;
+  // The basic attack's patterns: a test, the player picks one of five (the HUD panel or keys 1-5) and
+  // the pick travels in the hero's flags, so every machine swings the same shapes. Each hit shapes one
+  // swing for CL.swing: reach (rK), width (arcK), damage (dmgK), push (knockK), the side it sweeps
+  // from, a thrust streak, a second cut (twice), a step forward cutting along a line (step, line),
+  // or a shockwave in front (shock). fast: attack speed before each hit. 1.5 s without a swing starts
+  // the chain over.
+  const BMP = (CL.BMP = [
+    null,
+    { name: '가로 → 되돌려 → 내려베기', hits: [
+      { rK: 1, arcK: 1.5, dmgK: 1, side: 1 },
+      { rK: 1, arcK: 1.5, dmgK: 1, side: -1 },
+      { rK: 1.3, arcK: 0.45, dmgK: 1.5, knockK: 2, thrust: true, tip: true, color: 0xffffff, sfx: 'unsheathe' },
+    ] },
+    { name: '찌르기 → 넓게 → 내디뎌 일섬', hits: [
+      { rK: 1.25, arcK: 0.55, dmgK: 1, knockK: 0.6, thrust: true, sfx: 'knife', color: 0xffe8c8 },
+      { rK: 0.82, arcK: 1.95, dmgK: 0.9, knockK: 1.3 },
+      { dmgK: 1.4, knockK: 1.5, step: 2.6, line: 4.8, color: 0xffffff, sfx: 'unsheathe' },
+    ] },
+    // (per swing time, every pattern deals about the same: 1.1-1.2× a plain cut)
+    { name: '빠른 두 번 → X자 베기', fast: [1.35, 1.35, 1], hits: [
+      { rK: 0.95, arcK: 1.1, dmgK: 0.7, side: 1 },
+      { rK: 0.95, arcK: 1.1, dmgK: 0.7, side: -1 },
+      { rK: 1.05, arcK: 1.3, dmgK: 0.8, twice: true, color: 0xffffff, sfx: 'unsheathe' },
+    ] },
+    { name: '두 번 → 내려찍기 충격파', hits: [
+      { rK: 1, arcK: 1.35, dmgK: 1, side: 1 },
+      { rK: 1, arcK: 1.35, dmgK: 1, side: -1 },
+      { rK: 1.1, arcK: 0.6, dmgK: 0.9, knockK: 2, thrust: true, tip: true, color: 0xffffff, sfx: 'swingHeavy', shock: { at: 2.8, r: 2.4, k: 0.6 } },
+    ] },
+    { name: '좌우 연베기 (빠르게)', fast: [1.2], hits: [{ rK: 1, arcK: 1.35, dmgK: 0.95 }] },
+  ]);
+  const BM_RESET = 1.5;
+  const bmPat = (h) => BMP[h.bmPat] || BMP[1];
   def({
     id: 'blademaster', tier: 3, name: '검성', role: '기세를 타고 베어 넘기는 검객', emblem: 'katana', css: '#f0a050', energy: 0xffb060, ultDur: 1.4, orb: false,
     resource: { max: 10, name: '기세' },
     trait: { name: '기세', desc: '칼이 적을 벨 때마다 기세 +1(최대 10), 기세 하나당 주는 피해 +2.5%. 맞으면 기세가 절반으로 줄고, 4초 동안 베지 못하면 조금씩 식습니다.' },
-    basic: { name: '태도 삼박자', icon: 'katana', desc: '세 박자로 이어지는 연격: ① 앞으로 길고 좁게 찌르기 → ② 짧고 넓게 휘두르기 → ③ 한 바퀴 돌며 둘레를 모두 베는 회전 베기(×1.35). 1.5초 쉬면 찌르기부터 다시', melee: { r: 3.3, arc: 1.35 }, knock: 4, sfx: 'swing', color: 0xffd8a0 },
+    basic: { name: '태도', icon: 'katana', desc: '이어지는 연격으로 베는 근접 공격. 지금은 패턴을 시험하는 중: 플레이 화면 왼쪽 패널이나 숫자키 1~5로 다섯 가지 패턴을 바꿔 쓸 수 있음. 1.5초 쉬면 연격이 처음부터', melee: { r: 3.3, arc: 1.35 }, knock: 4, sfx: 'swing', color: 0xffd8a0 },
     stats(s) { s.maxHp = 120; s.armor += 2; s.speed *= 1.06; s.dmg = 22; s.fireRate = 2.5; s.crit += 0.06; },
     skills: [
       { name: '발도', icon: 'iai', kind: 'charge', cd: 7, chargeTime: 0.8, line: (ch, s) => ({ len: (5 + 7 * ch) * (0.9 + 0.1 * s.lanceWidth), w: 2.6 }),
@@ -949,16 +973,22 @@
     ],
     ult: { name: '삼연 일섬', icon: 'triple', desc: '눈에 보이지 않는 속도로 조준한 곳을 세 방향에서 가로지르며 벰(그동안 무적): 세 일섬이 한가운데서 별 모양으로 겹쳐 그 자리의 적은 세 번 모두 맞고, 마지막 일섬은 반드시 치명타. 칼을 거두는 순간 베인 적 모두에게 한 번 더 피해를 주고, 별 한가운데의 가장 강한 적에게는 반드시 치명타인 마무리 일격. 기세가 많을수록 강함' },
     dealtK: (h) => 1 + 0.025 * (h.res || 0),
-    // thrust, sweep, spin (every machine runs this as it draws the swing; the host also deals it)
+    // the next hit of the picked pattern (every machine runs this as it draws the swing; the host also
+    // deals it). h.combo is the index of the hit that comes next
     swingMod(h) {
-      const now = G.Game.time;
+      if (h.drive === 'input') h.bmPat = G.Settings.bmPat || 1;
+      const P = bmPat(h), n = P.hits.length, now = G.Game.time;
       if (now - (h.swingAt || -9) > BM_RESET) h.combo = 0;
       h.swingAt = now;
-      h.combo = ((h.combo || 0) + 1) % 3; h.swingN = (h.swingN || 0) + 1;
-      const m = BM_CHAIN[(h.combo + 2) % 3];
-      if (m.spin) h.spinT = BM_SPIN;
-      return m;
+      const i = (h.combo || 0) % n;
+      h.combo = (i + 1) % n; h.swingN = (h.swingN || 0) + 1;
+      return P.hits[i];
     },
+    // some patterns swing faster before some hits
+    rateK(h) { const P = bmPat(h); return P.fast ? P.fast[(h.combo || 0) % P.fast.length] || 1 : 1; },
+    // the pick travels with the hero (3 bits: patterns 1-5)
+    flags(h) { if (h.drive === 'input') h.bmPat = G.Settings.bmPat || 1; return (h.bmPat || 1) & 7; },
+    applyFlags(h, f) { if (f >= 1 && f <= 5 && h.bmPat !== f) { h.bmPat = f; h.combo = 0; } },
     onHitK(h, t, dealt, crit, killed, o) {
       if (o.source === 'melee') { if (h.gainSwing !== h.swingN) { h.gainSwing = h.swingN; CL.gain(h, 1); h.calmT = 4; } }
       else if (o.source === 'skill' && G.Game.time - (h.skGainT || 0) > 0.4) { h.skGainT = G.Game.time; CL.gain(h, 2); h.calmT = 4; }
@@ -1037,14 +1067,12 @@
       const b = h.parts.blade;
       if (!b) return;
       // the guard: blade upright before the body; otherwise low and ready. The blade grows when the
-      // next swing is the spin (two beats done and the chain still going)
-      const guard = h.parryT > 0, big = h.combo === 2 && G.Game.time - (h.swingAt || -9) < BM_RESET;
+      // next swing is the last, strongest hit of the chain
+      const n = bmPat(h).hits.length, guard = h.parryT > 0;
+      const big = n > 1 && h.combo === n - 1 && G.Game.time - (h.swingAt || -9) < BM_RESET;
       b.rotation.x = U.damp(b.rotation.x, guard ? 1.45 : -0.4, 18, dt);
       b.rotation.y = U.damp(b.rotation.y, guard ? 0.9 : 0, 18, dt);
       b.scale.setScalar(U.damp(b.scale.x, big ? 1.15 : 1, 8, dt));
-      // the spin: the whole body turns once
-      if (h.spinT > 0) { h.spinT = Math.max(0, h.spinT - dt); h.body.rotation.y = (1 - h.spinT / BM_SPIN) * TAU * -(h.swingSide || 1); }
-      else if (h.body.rotation.y) h.body.rotation.y = 0;
       if (guard && Math.random() < 0.5) G.FX.trail(h.x + Math.cos(h.facing) * 0.6, h.y + 1.5, h.z + Math.sin(h.facing) * 0.6, 0xffe0b0, 0.5, 0.2, 2.4);
       if ((h.res || 0) >= 7 && Math.random() < 0.25) G.FX.trail(h.x + U.rand(-0.4, 0.4), h.y + U.rand(0.5, 2), h.z + U.rand(-0.4, 0.4), 0xffb060, 0.35, 0.35, 2.2);
     },

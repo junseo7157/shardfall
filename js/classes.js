@@ -1388,20 +1388,41 @@
     // a character may shape each swing (the blademaster's third cut, the druid's bear paw)
     const mod = (h.cls.swingMod && h.cls.swingMod(h)) || NOSW;
     const r = m.r * (0.85 + 0.15 * s.projSize) * (1 + (s.reach || 0)) * (mod.rK || 1), half = Math.min(Math.PI, (m.arc * (mod.arcK || 1) * (1 + 0.25 * (n - 1))) / 2);
-    const a = Math.atan2(h.aimZ - h.z, h.aimX - h.x);
-    h.swingSide = -(h.swingSide || 1);
-    swingFx(h, a, r, half, h.swingSide, mod.color || b.color || (m.r > 3.2 ? 0xffe6a0 : 0xffb090), mod.thrust != null ? mod.thrust : m.arc < 1.2);
+    const a = Math.atan2(h.aimZ - h.z, h.aimX - h.x), x0 = h.x, z0 = h.z;
+    // the side it sweeps from: set by the swing (a back-cut) or turn about
+    h.swingSide = mod.side || -(h.swingSide || 1);
+    const col = mod.color || b.color || (m.r > 3.2 ? 0xffe6a0 : 0xffb090), thrust = mod.thrust != null ? mod.thrust : m.arc < 1.2;
+    // a step forward that cuts along its line (its own player's copy is carried; the others see it move)
+    const len = mod.line ? mod.line * (1 + (s.reach || 0)) : 0;
+    if (mod.step && h.drive === 'input') { h.dashDir = { x: Math.cos(a), z: Math.sin(a) }; h.dashT = Math.max(h.dashT || 0, mod.step / 46); }
+    if (len) swingFx(h, a, len, 0.3, h.swingSide, col, true);
+    else if (mod.twice) { swingFx(h, a + 0.35, r, half, 1, col, false); swingFx(h, a - 0.35, r, half, -1, col, false); }
+    else swingFx(h, a, r, half, h.swingSide, col, thrust);
+    // a downward cut strikes the ground at its tip; a slam throws a shockwave ahead
+    if (mod.tip) { const tx = x0 + Math.cos(a) * r * 0.9, tz = z0 + Math.sin(a) * r * 0.9; G.FX.burst(tx, hy(tx, tz) + 0.3, tz, { count: 10, color: col, intensity: 2.6, speed: [3, 7], life: [0.12, 0.25], size: [0.35, 0.02] }); }
+    let sx = 0, sz = 0;
+    if (mod.shock) {
+      sx = x0 + Math.cos(a) * mod.shock.at; sz = z0 + Math.sin(a) * mod.shock.at;
+      const y = hy(sx, sz);
+      G.FX.ring(sx, y + 0.2, sz, 0.3, mod.shock.r, 0.3, col, 2.6);
+      G.FX.burst(sx, y + 0.4, sz, { count: 16, color: 0xe8d8c0, intensity: 2, spread: 'ring', speed: [4, 9], life: [0.2, 0.4], size: [0.4, 0.03] });
+      if (h === G.Player) G.Render.shake(0.12);
+    }
     const sfx = mod.sfx || b.sfx || 'swing';
     if (h === G.Player) { G.Audio.play(sfx); G.UI.fireKick(); }
     else if (near(h.x, h.z) > 0.5) G.Audio.play(sfx);
     if (!h.auth) return;
     const dmg = s.dmg * s.dmgMult * (b.dmgK || 1) * (mod.dmgK || 1) * (1 + 0.2 * (n - 1)), kn = (b.knock || 4) * (mod.knockK || 1);
     const sure = mod.crit === true;
-    C.forEachTarget(h.x, h.z, r, (t) => {
-      if (!inCone(h, t, a, half)) return;
-      const dx = t.x - h.x, dz = t.z - h.z, d = Math.hypot(dx, dz) || 1;
-      C.damage(t, dmg, { kx: dx / d, kz: dz / d, knock: kn, source: 'melee', procs: true, by: h, crit: sure });
-    });
+    const hit = (t, k) => {
+      const dx = t.x - x0, dz = t.z - z0, d = Math.hypot(dx, dz) || 1;
+      C.damage(t, dmg * k, { kx: dx / d, kz: dz / d, knock: kn, source: 'melee', procs: true, by: h, crit: sure });
+    };
+    const cone = () => C.forEachTarget(x0, z0, r, (t) => { if (inCone(h, t, a, half)) hit(t, 1); });
+    if (len) C.line(x0, z0, a, len, 2.4, (t) => hit(t, 1));
+    else cone();
+    if (mod.twice) G.Enemies.later(0.08, cone);
+    if (mod.shock) C.forEachTarget(sx, sz, mod.shock.r, (t) => hit(t, mod.shock.k));
   };
   function swingFx(h, a, r, half, side, color, thrust) {
     const y = h.y + 1.05, n = 14, c = tmpC.set(color);

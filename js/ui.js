@@ -155,6 +155,18 @@
       if (i >= 0 && i < UI.cards.length) UI.pickCard(i);
       if (e.code === 'KeyF') UI.reroll();
     });
+    // the blademaster's test panel: a click picks a pattern and never reaches the game as an attack
+    const bm = $('bm-test');
+    for (const ev of ['mousedown', 'mouseup', 'pointerdown']) bm.addEventListener(ev, (e) => e.stopPropagation());
+    bm.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-p]');
+      if (b) UI.setBmPat(+b.dataset.p);
+    });
+    addEventListener('keydown', (e) => {
+      if (UI.current || e.repeat || G.Input.typing(e) || G.Game.state !== 'playing') return;
+      const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].indexOf(e.code);
+      if (i >= 0 && G.Player && G.Player.cls.id === 'blademaster') UI.setBmPat(i + 1);
+    });
     G.Events.on('upgrade', () => UI.renderUpgradeList());
     G.Events.on('net', () => {
       if (UI.current === 'coop') UI.renderCoop();
@@ -195,6 +207,26 @@
       a.el.title = slots[k][1];
     }
     E.ab.dash.el.title = '질주';
+    UI.bmPanel(h);
+  };
+  // the blademaster's basic-attack test: five patterns to try, by button or keys 1-5 while playing
+  UI.bmPanel = function (h) {
+    const el = $('bm-test'), on = !!(h && h.cls.id === 'blademaster' && h === G.Player);
+    el.classList.toggle('hidden', !on);
+    if (!on) return;
+    const cur = G.Settings.bmPat || 1, P = G.Classes.BMP;
+    el.innerHTML = '<div class="bt-title">검성 평타 테스트<small>눌러서 바꾸거나 숫자키 1~5</small></div>' +
+      [1, 2, 3, 4, 5].map((i) => `<button data-p="${i}" class="${i === cur ? 'on' : ''}"><kbd>${i}</kbd><span>${P[i].name}</span></button>`).join('');
+  };
+  UI.setBmPat = function (i) {
+    const P = G.Classes.BMP;
+    if (!P[i] || !G.Player || G.Player.cls.id !== 'blademaster') return;
+    G.Settings.bmPat = i;
+    G.saveSettings();
+    G.Player.bmPat = i; G.Player.combo = 0;
+    UI.bmPanel(G.Player);
+    UI.toast(`평타 ${i}번 · ${P[i].name}`, 'gold', 1.6);
+    G.Audio.play('ui');
   };
   UI.setPlaying = function (on) { document.body.classList.toggle('playing', on); };
   UI.refreshMenu = function () {
