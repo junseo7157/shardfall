@@ -187,8 +187,9 @@
   UI.hud = function (on) { E.hud.classList.toggle('hidden', !on); };
   // the skill bar wears the current character's skills (hover a slot for its name)
   UI.setHero = function (h) {
-    const c = h.cls, sk = c.skills;
-    const slots = { lmb: [c.basic.icon, c.basic.name], rmb: [sk[0].icon, sk[0].name], q: [sk[1].icon, sk[1].name], e: [sk[2].icon, sk[2].name], r: [c.ult.icon, c.ult.name] };
+    const c = h.cls, CL = G.Classes, b = CL.basicOf(h), sk = [1, 2, 3].map((i) => CL.skillView(h, i));
+    viewKey = c.viewKey ? c.viewKey(h) : null;
+    const slots = { lmb: [b.icon, b.name], rmb: [sk[0].icon || c.skills[0].icon, sk[0].name], q: [sk[1].icon || c.skills[1].icon, sk[1].name], e: [sk[2].icon || c.skills[2].icon, sk[2].name], r: [c.ult.icon, c.ult.name] };
     for (const k in slots) {
       const a = E.ab[k];
       a.el.querySelector('.ab-icon').innerHTML = G.Icons.svg(slots[k][0]);
@@ -520,6 +521,7 @@
 
   // ---------------- HUD ----------------
   const _sp = { x: 0, y: 0, vis: false };
+  let viewKey = null; // what the skill bar last showed (the druid's form, the bard's song)
   UI.update = function (dt) {
     const P = G.Player, Gm = G.Game, s = P.stats, mp = Gm.mode !== 'solo';
     const m = G.Input.mouse;
@@ -567,13 +569,21 @@
     });
     const lm = E.ab.lmb;
     lm.el.classList.toggle('active', m.left && P.alive);
-    // the gunslinger's six rounds, and a reload
+    // a skill bar that changes with the character's state (the druid's form, the bard's song)
+    if (P.cls.viewKey && P.cls.viewKey(P) !== viewKey) { UI.setHero(P); G.Touch.setHero(P); }
+    // the gunslinger's six rounds, and a reload; souls and momentum
+    const res = P.cls.resource;
     if (P.cls.ammo) {
-      if (lm.pips.children.length !== P.cls.ammo) lm.pips.innerHTML = '<i></i>'.repeat(P.cls.ammo);
+      if (lm.pips.children.length !== P.cls.ammo) { lm.pips.innerHTML = '<i></i>'.repeat(P.cls.ammo); lm.pips.classList.remove('res'); }
       [...lm.pips.children].forEach((p, i) => p.classList.toggle('on', i < P.ammo));
       lm.txt.textContent = P.reloadT > 0 ? P.reloadT.toFixed(1) : '';
       lm.cd.style.setProperty('--cd', P.reloadT > 0 ? 1 : 0);
-    } else if (lm.pips.childElementCount) { lm.pips.innerHTML = ''; lm.txt.textContent = ''; lm.cd.style.setProperty('--cd', 0); }
+    } else if (res) {
+      if (lm.pips.children.length !== res.max) { lm.pips.innerHTML = '<i></i>'.repeat(res.max); lm.pips.classList.add('res'); lm.el.title = P.cls.basic.name + ' · ' + res.name; }
+      const n = Math.round(P.res || 0);
+      [...lm.pips.children].forEach((p, i) => p.classList.toggle('on', i < n));
+      lm.txt.textContent = n > 0 ? String(n) : '';
+    } else if (lm.pips.childElementCount) { lm.pips.innerHTML = ''; lm.pips.classList.remove('res'); lm.txt.textContent = ''; lm.cd.style.setProperty('--cd', 0); }
     const d = E.ab.dash;
     if (d.pips.children.length !== s.dashCharges) d.pips.innerHTML = '<i></i>'.repeat(s.dashCharges);
     [...d.pips.children].forEach((p, i) => p.classList.toggle('on', i < P.dashCharges));

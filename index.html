@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700;800;900&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=10">
+<link rel="stylesheet" href="css/style.css?v=13">
 <script type="importmap">
 {
   "imports": {
@@ -332,8 +332,8 @@ try {
     EffectComposer: ec.EffectComposer, RenderPass: rp.RenderPass, UnrealBloomPass: ub.UnrealBloomPass,
     ShaderPass: sp.ShaderPass, OutputPass: op.OutputPass, mergeGeometries: bgu.mergeGeometries,
   };
-  const files = ['core', 'render', 'world', 'fx', 'audio', 'vis', 'icons', 'upgrades', 'hero', 'classes', 'projectiles', 'enemies', 'bosses', 'pickups', 'net', 'ui', 'touch', 'game'];
-  const BUILD = ['localhost', '127.0.0.1'].includes(location.hostname) ? String(Date.now()) : '17';
+  const files = ['core', 'render', 'world', 'fx', 'audio', 'vis', 'icons', 'upgrades', 'hero', 'classes', 'classes2', 'projectiles', 'enemies', 'bosses', 'pickups', 'net', 'ui', 'touch', 'game'];
+  const BUILD = ['localhost', '127.0.0.1'].includes(location.hostname) ? String(Date.now()) : '18';
   for (let i = 0; i < files.length; i++) {
     setStatus('게임 데이터 받는 중 · ' + files[i]);
     await loadScript('js/' + files[i] + '.js?v=' + BUILD);

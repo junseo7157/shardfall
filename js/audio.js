@@ -7,7 +7,8 @@
   let ctx, master, sfxBus, musicBus, comp, noiseBuf, delay, delayFb, delayWet;
   const last = {};
   const THROTTLE = { shoot: 0.045, hit: 0.03, crit: 0.04, kill: 0.035, pickup: 0.028, enemyShoot: 0.06, lightning: 0.06, explode: 0.07, blade: 0.08, burn: 0.1, slam: 0.1, telegraph: 0.12, portal: 0.15, clink: 0.05,
-    flame: 0.12, whirl: 0.2, swing: 0.06, swingHeavy: 0.08, gun: 0.03, turret: 0.08, cannon: 0.1, beamHeal: 0.3, beamHurt: 0.25, cut: 0.05, tick: 0.06, rivet: 0.04, knife: 0.04, bow: 0.05, fireball: 0.05, hawk: 0.3, snap: 0.1 };
+    flame: 0.12, whirl: 0.2, swing: 0.06, swingHeavy: 0.08, gun: 0.03, turret: 0.08, cannon: 0.1, beamHeal: 0.3, beamHurt: 0.25, cut: 0.05, tick: 0.06, rivet: 0.04, knife: 0.04, bow: 0.05, fireball: 0.05, hawk: 0.3, snap: 0.1,
+    shardShot: 0.08, ricochet: 0.04, smite: 0.08, boneHit: 0.06, soul: 0.08, note: 0.06, gravPull: 0.15, vine: 0.1, windSlash: 0.06, bell: 0.2, parry: 0.1 };
 
   A.init = function () {
     if (A.ready) { if (ctx.state === 'suspended') ctx.resume(); return; }
@@ -197,6 +198,56 @@
     timeResume(t) { tone('sine', 60, 700, t, 0.01, 0.4, 0.1); },
     roll(t) { noise(t, 0.01, 0.2, 0.1, 'bandpass', 500, 1200, 1); },
     lasso(t) { noise(t, 0.01, 0.25, 0.09, 'bandpass', 1400, 600, 2); tone('triangle', 500, 900, t, 0.01, 0.2, 0.04); },
+    // ---- the ultimates ----
+    shardShot(t) { tone('triangle', 2400, 1800, t, 0.002, 0.08, 0.04); tone('sine', 3600, 3200, t, 0.002, 0.06, 0.02); },
+    shatter(t) {
+      noise(t, 0.003, 0.45, 0.22, 'highpass', 5200, 2400, 0.8);
+      [2900, 4100, 3500, 5200, 2300].forEach((f, i) => tone('sine', f, f * 0.96, t + i * 0.03, 0.002, 0.25, 0.035));
+      tone('sine', 120, 50, t, 0.004, 0.4, 0.3);
+    },
+    fortRise(t) {
+      tone('sine', 62, 38, t, 0.02, 1.0, 0.4); noise(t, 0.05, 0.9, 0.2, 'lowpass', 420, 90, 0.7);
+      [55, 62, 67, 74].forEach((m, i) => tone('sawtooth', mtof(m), mtof(m), t + 0.15 + i * 0.07, 0.04, 0.8, 0.045, sfxBus, { f: 1500 }));
+    },
+    eagleCry(t) { tone('sawtooth', 2800, 1500, t, 0.03, 0.5, 0.05, sfxBus, { f: 3600, q: 3 }); tone('sine', 3100, 1900, t + 0.05, 0.02, 0.45, 0.03); noise(t, 0.05, 0.5, 0.06, 'bandpass', 900, 2600, 1); },
+    phoenix(t) {
+      noise(t, 0.05, 0.7, 0.18, 'bandpass', 400, 3200, 1);
+      tone('sawtooth', 700, 1500, t, 0.05, 0.5, 0.05, sfxBus, { f: 2600, q: 2 }); tone('sawtooth', 1500, 1100, t + 0.4, 0.02, 0.5, 0.05, sfxBus, { f: 3000, q: 2 });
+      tone('sine', 90, 45, t, 0.01, 0.7, 0.3);
+    },
+    angel(t) { [72, 76, 79, 84, 88].forEach((m, i) => tone('sine', mtof(m), mtof(m), t + i * 0.08, 0.25, 1.4, 0.05)); noise(t, 0.3, 1.2, 0.07, 'highpass', 4000, 7000, 0.7); },
+    smite(t) { noise(t, 0.002, 0.25, 0.16, 'highpass', 5000, 1500); tone('triangle', 1800, 700, t, 0.002, 0.25, 0.06); tone('sine', 110, 50, t, 0.004, 0.3, 0.25); },
+    bloodCharge(t) { tone('sawtooth', 55, 170, t, 0.05, 1.0, 0.12, sfxBus, { f: 650 }); noise(t, 0.1, 0.9, 0.12, 'lowpass', 300, 1400, 1); tone('sine', 40, 70, t, 0.05, 0.9, 0.25); },
+    cleave(t) { noise(t, 0.003, 0.28, 0.22, 'bandpass', 300, 1500, 1); tone('sine', 95, 32, t, 0.004, 0.7, 0.55); noise(t + 0.03, 0.004, 0.55, 0.35, 'lowpass', 1900, 90, 0.7); },
+    lockOn(t) { [0, 0.16, 0.32].forEach((d) => tone('square', 1800, 1800, t + d, 0.002, 0.06, 0.04, sfxBus, { f: 3000 })); tone('square', 2400, 2400, t + 0.5, 0.002, 0.25, 0.04, sfxBus, { f: 3200 }); },
+    orbital(t) { tone('sawtooth', 2400, 70, t, 0.003, 0.9, 0.14, sfxBus, { f: 3200 }); noise(t, 0.002, 1.0, 0.32, 'highpass', 3200, 700); tone('sine', 75, 28, t, 0.004, 0.9, 0.55); },
+    coinFlip(t) { [0, 0.06, 0.13, 0.19, 0.24, 0.3].forEach((d, i) => tone('sine', 3000 + i * 180, 3300 + i * 180, t + d, 0.002, 0.12, 0.03)); },
+    ricochet(t) { tone('sine', 2700, 800, t, 0.002, 0.16, 0.05); noise(t, 0.002, 0.08, 0.06, 'bandpass', 3500, 1800, 3); },
+    // ---- the newer five ----
+    boneRaise(t) { noise(t, 0.02, 0.35, 0.12, 'bandpass', 500, 1800, 1.5); [0, 0.07, 0.15, 0.22].forEach((d) => tone('square', 900 + Math.random() * 300, 500, t + d, 0.001, 0.03, 0.03, sfxBus, { f: 2200 })); },
+    boneHit(t) { noise(t, 0.001, 0.06, 0.08, 'bandpass', 1600, 900, 2); tone('square', 420, 200, t, 0.001, 0.05, 0.03, sfxBus, { f: 1800 }); },
+    soul(t) { tone('sine', 420, 1260, t, 0.01, 0.22, 0.04); tone('triangle', 840, 1680, t + 0.03, 0.01, 0.18, 0.02); },
+    gateOpen(t) { tone('sawtooth', 52, 34, t, 0.1, 1.3, 0.22, sfxBus, { f: 320 }); noise(t, 0.2, 1.1, 0.16, 'lowpass', 300, 120, 0.7); [48, 51, 55].forEach((m, i) => tone('sine', mtof(m), mtof(m) * 0.98, t + i * 0.2, 0.1, 1.0, 0.06)); },
+    gravPull(t) { tone('sine', 320, 70, t, 0.01, 0.45, 0.07); tone('sawtooth', 130, 45, t, 0.01, 0.4, 0.05, sfxBus, { f: 500 }); },
+    gravPush(t) { noise(t, 0.003, 0.4, 0.28, 'lowpass', 2200, 200, 0.8); tone('sine', 110, 320, t, 0.003, 0.2, 0.18); },
+    blackhole(t) { tone('sawtooth', 46, 37, t, 0.15, 1.6, 0.22, sfxBus, { f: 220 }); tone('sine', 92, 58, t, 0.1, 1.5, 0.2); noise(t, 0.2, 1.3, 0.1, 'bandpass', 900, 200, 2); },
+    supernova(t) {
+      noise(t, 0.003, 1.0, 0.45, 'lowpass', 2600, 80, 0.7); tone('sine', 90, 24, t, 0.004, 1.0, 0.6);
+      [60, 67, 72, 76, 79].forEach((m, i) => tone('sawtooth', mtof(m), mtof(m), t + 0.05 + i * 0.03, 0.02, 0.9, 0.04, sfxBus, { f: 2400 }));
+    },
+    vine(t) { noise(t, 0.01, 0.3, 0.12, 'bandpass', 380, 900, 1.5); tone('triangle', 190, 360, t, 0.01, 0.25, 0.05); },
+    roar(t) { tone('sawtooth', 170, 70, t, 0.02, 0.6, 0.18, sfxBus, { f: 900 }); noise(t, 0.02, 0.55, 0.25, 'lowpass', 1000, 260, 0.8); tone('sine', 75, 45, t, 0.02, 0.5, 0.3); },
+    transform(t) { tone('sine', 300, 950, t, 0.02, 0.3, 0.06); noise(t, 0.02, 0.35, 0.1, 'bandpass', 700, 2600, 1.2); },
+    treeGrow(t) { tone('sine', 110, 230, t, 0.1, 1.0, 0.2); [60, 64, 67, 72, 76].forEach((m, i) => tone('triangle', mtof(m), mtof(m), t + 0.2 + i * 0.1, 0.02, 0.9, 0.05)); noise(t, 0.1, 0.8, 0.1, 'bandpass', 300, 900, 1); },
+    bell(t) { [1, 2.76, 5.4].forEach((k, i) => tone('sine', 660 * k, 660 * k, t, 0.002, 1.6 - i * 0.4, 0.07 / (i + 1))); },
+    chord(t) { [72, 76, 79, 84].forEach((m, i) => tone('triangle', mtof(m), mtof(m), t + i * 0.05, 0.005, 0.35, 0.05)); },
+    discord(t) { tone('sawtooth', 440, 420, t, 0.005, 0.3, 0.05, sfxBus, { f: 1800 }); tone('sawtooth', 466, 480, t, 0.005, 0.3, 0.05, sfxBus, { f: 1800 }); noise(t, 0.005, 0.25, 0.1, 'bandpass', 1200, 600, 1); },
+    note(t) { const m = [72, 74, 76, 79, 81, 84][Math.floor(Math.random() * 6)]; tone('triangle', mtof(m), mtof(m), t, 0.005, 0.28, 0.05); },
+    crescendo(t) { [60, 64, 67, 72, 76, 79, 84].forEach((m, i) => tone('triangle', mtof(m), mtof(m), t + i * 0.045, 0.01, 0.6, 0.05)); tone('sine', 65, 45, t + 0.3, 0.01, 0.5, 0.3); },
+    unsheathe(t) { noise(t, 0.002, 0.2, 0.14, 'highpass', 6500, 3200); tone('triangle', 2600, 3600, t, 0.002, 0.16, 0.04); },
+    parry(t) { tone('triangle', 2300, 1900, t, 0.002, 0.18, 0.08); tone('sine', 3400, 3300, t, 0.002, 0.12, 0.04); noise(t, 0.001, 0.08, 0.12, 'bandpass', 3000, 2000, 3); },
+    windSlash(t) { noise(t, 0.01, 0.28, 0.16, 'bandpass', 1200, 3200, 1.5); tone('sine', 900, 1500, t, 0.01, 0.2, 0.03); },
+    iai(t) { tone('sine', 4200, 900, t, 0.001, 0.09, 0.07); noise(t, 0.001, 0.12, 0.2, 'highpass', 6000, 2500); tone('sine', 120, 50, t + 0.02, 0.003, 0.25, 0.25); },
   };
 
   A.play = function (name, o = {}) {

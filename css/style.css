@@ -172,6 +172,9 @@ body.playing #crosshair { display: block; }
 .ab-pips i { width: 9px; height: 4px; background: var(--ink); }
 .ab-pips i.on { background: var(--emerald-l); }
 .ab-pips.ammo i { width: 5px; height: 6px; }
+.ab-pips.res { gap: 2px; }
+.ab-pips.res i { width: 3px; height: 6px; }
+.ab-pips.res i.on { background: #c8f08a; box-shadow: 0 0 4px #c8f08a; }
 .ab-pips.ammo i.on { background: var(--amber-l); }
 .ab-charge { position: absolute; left: 4px; right: 4px; bottom: 3px; height: 4px; background: var(--ink); }
 .ab-charge div { height: 100%; width: 0; background: var(--paper); }
@@ -467,6 +470,17 @@ input:focus { border-color: var(--amber); }
 @media (max-width: 760px) {
   .cls-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .cls-info ul, .lobby-panel .roster { grid-template-columns: minmax(0, 1fr); }
+}
+/* fifteen characters on a short (landscape phone) screen: smaller panes, the name alone, no
+   introduction, so all three rows fit above the buttons */
+@media (max-height: 560px) {
+  .cls-grid { gap: 4px; }
+  .cls-card { min-height: 0; padding: 4px 3px 3px; gap: 0; }
+  .cls-card .cls-ico { width: 22px; height: 22px; }
+  .cls-card b { font-size: 12px; }
+  .cls-card small, .cls-card .cls-rec { display: none; }
+  .chars-panel > h2 { margin-bottom: 4px; font-size: 20px; }
+  .chars-panel > .lead { display: none; }
 }
 .lobby-party b { color: var(--amber-l); }
 /* how hard a character is to play, and what it has done so far */

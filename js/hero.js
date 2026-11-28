@@ -322,6 +322,7 @@
       this.seen = { s1: 0, s2: 0, s3: 0, us: 0 };
       this.net = null;
       this.rv = 0; this.rvh = 0;
+      this.res = 0; // a character's gauge (souls, momentum)
       this.lastOp = 1;
       this.stopLanceSound();
       this.syncOrbiters();
@@ -348,6 +349,8 @@
     }
     takeDamage(amount, sx, sz) {
       if (!this.auth || !this.alive || this.invuln > 0 || this.dashT > 0 || this.leap || (this.ultT > 0 && this.stats.avatar) || G.Classes.immune(this)) return false;
+      // a character may answer the hit itself (the blademaster's parry), or lose something to it
+      if (G.Classes.onTaken(this, amount, sx, sz)) return true;
       const s = this.stats;
       let dmg = amount * (30 / (30 + s.armor)) * G.Game.diffDamage() * G.Classes.takenMult(this, sx, sz, amount);
       dmg = G.Classes.absorb(this, dmg);
@@ -447,7 +450,7 @@
     // ---------------- basic attack ----------------
     // returns false when the weapon can't fire yet (the gunslinger reloading)
     fire(extra = 0) {
-      const c = this.cls, b = c.basic;
+      const c = this.cls, b = c.basicOf ? c.basicOf(this) : c.basic;
       if (c.canFire && !c.canFire(this)) return false;
       if (b.melee) { G.Classes.swing(this); if (this.stats.echo && Math.random() < this.stats.echo) this.echoQ.push(0.12); return true; }
       const s = this.stats, mod = (c.fireMod && c.fireMod(this)) || NOMOD, shot = (c.onShot && c.onShot(this)) || NOMOD;
@@ -526,6 +529,8 @@
     // skill worked out, like where a blink landed)
     castSkill(i, a) {
       a.q = ++this.seq[SK[i]];
+      // a character can add to what travels with the cast (the druid: which form cast it)
+      if (this.cls.castArgs) this.cls.castArgs(this, i, a);
       this.useSkill(i, a);
       this.ca[i] = [U.r2(a.ang || 0), U.r1(a.x || 0), U.r1(a.z || 0), U.r2(a.ch || 0)];
     }
@@ -713,7 +718,7 @@
       const show = !!(sk && sk.line);
       this.aimLine.visible = show;
       if (!show) return;
-      const am = sk.line(this.charging ? this.lanceCharge : 1, this.stats);
+      const am = sk.line(this.charging ? this.lanceCharge : 1, this.stats, this);
       this.aimLine.position.set(this.x, this.y + 0.12, this.z);
       this.aimLine.rotation.y = -ang - Math.PI / 2;
       this.aimLine.scale.set(am.w, 1, am.len);
@@ -736,6 +741,7 @@
       this.lanceCharge = this.charging ? n.lc : 0;
       this.stealthVis = !!(n.fl & 8);
       this.leapVis = !!(n.fl & 16);
+      if (this.cls.applyFlags) this.cls.applyFlags(this, (n.fl >> 5) & 7);
       // a channel starts and stops as the player holds it
       if (n.chan !== this.chan) {
         if (this.chan) this.endChannel(false);
@@ -920,7 +926,8 @@
     netState() {
       const ca = this.ca;
       return [U.r2(this.x), U.r2(this.z), U.r2(this.facing), U.r1(this.aimX), U.r1(this.aimZ),
-        (this.firing ? 1 : 0) | (this.charging ? 2 : 0) | (this.dashT > 0 ? 4 : 0) | (this.stealthT > 0 ? 8 : 0) | (this.leap ? 16 : 0),
+        (this.firing ? 1 : 0) | (this.charging ? 2 : 0) | (this.dashT > 0 ? 4 : 0) | (this.stealthT > 0 ? 8 : 0) | (this.leap ? 16 : 0) |
+          ((this.cls.flags ? this.cls.flags(this) & 7 : 0) << 5), // a character's own state: the druid's form, the bard's song
         this.chan, this.charging ? this.chgSlot : 0, U.r2(this.charging ? this.lanceCharge : this.lastLc),
         this.seq.s1, ...ca[1], this.seq.s2, ...ca[2], this.seq.s3, ...ca[3], this.seq.us, this.cls.netAmmo ? this.cls.netAmmo(this) : 0];
     }

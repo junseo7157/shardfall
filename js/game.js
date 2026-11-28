@@ -456,6 +456,7 @@
       if (!h || !Array.isArray(a)) return;
       const hp = n(a[0], h.hp, 0, 1e6), alive = !!a[2], rv = n(a[5], 0, 0, 999) | 0, here = !!a[7];
       h.shieldHp = n(a[6], 0, 0, 1e4);
+      h.res = n(a[8], 0, 0, 99); // souls, momentum: the host keeps the count
       if (h === G.Player && alive && hp < h.hp - 0.5 && h.alive) {
         G.Render.hurt(0.75); G.Render.shake(0.32); G.Audio.play('hurt');
         G.FX.dmgNumber(h.x, h.y + 1.8, h.z, '-' + Math.round(h.hp - hp), 'player');

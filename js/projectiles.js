@@ -128,7 +128,7 @@
         if (hitT.boss) for (const q of hitT.boss.targets) b.hit.add(q);
         const kx = b.vx / b.speed, kz = b.vz / b.speed;
         if (!b.cos) {
-          const dmg = b.dmg * (1 + Math.min(0.6, b.dist * b.grow));
+          const dmg = b.dmg * (1 + Math.min(0.4, b.dist * b.grow));
           C.damage(hitT, dmg, { kx, kz, knock: b.knock, source: b.source, procs: b.procs, by: b.by, crit: b.crit || undefined });
           if (b.mark && hitT.alive) G.Classes.mark(hitT, b.mark, 1);
         }

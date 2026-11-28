@@ -275,7 +275,7 @@
       if (how) how.textContent = HOW_ICON[kind] || '';
       b.el.dataset.kind = kind || '';
     };
-    for (let i = 1; i <= 3; i++) set(BTN_OF[i], c.skills[i - 1].icon, c.skills[i - 1].name, c.skills[i - 1].kind);
+    for (let i = 1; i <= 3; i++) { const v = G.Classes.skillView(h, i), sk = c.skills[i - 1]; set(BTN_OF[i], v.icon || sk.icon, v.name || sk.name, sk.kind); }
     set('r', c.ult.icon, c.ult.name, 'self');
     ammoEl.classList.toggle('hidden', !c.ammo);
     ammoEl.innerHTML = c.ammo ? '<i></i>'.repeat(c.ammo) : '';
