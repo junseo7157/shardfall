@@ -119,11 +119,7 @@
   const flap = (g, t, k = 1) => { g.userData.wL.rotation.z = Math.sin(t) * 0.75 * k; g.userData.wR.rotation.z = -Math.sin(t) * 0.75 * k; };
 
   // ================= the ten =================
-  const MELEE_OFF = ['seeker', 'ricochet', 'pierce', 'velocity'];
-  const MELEE_ALT = {
-    multishot: { desc: '휘두르는 범위 <b>+25%</b>, 근접 피해 <b>+20%</b>' },
-    enlarge: { desc: '공격 거리 <b>+15%</b>, 피해 <b>+6%</b>' },
-  };
+  // (a melee basic attack also changes which level-up cards come up: upgrades.js UP.fits)
 
   // ---------- 1. shard mage: the solo hero ----------
   def({
@@ -157,7 +153,6 @@
     trait: { name: '불굴', desc: '받는 피해가 20% 줄고, 6m 안의 동료도 받는 피해가 10% 줄어듭니다.' },
     basic: { name: '성광 망치', icon: 'hammer', desc: '앞쪽을 크게 휘둘러 맞은 적을 모두 밀쳐내는 근접 공격', melee: { r: 3.6, arc: 2.1 }, knock: 9, sfx: 'swingHeavy' },
     stats(s) { s.maxHp = 160; s.armor += 5; s.speed *= 0.92; s.dmg = 30; s.fireRate = 2.1; },
-    cardOff: MELEE_OFF, cardAlt: MELEE_ALT,
     skills: [
       { name: '방패 세우기', icon: 'shield', kind: 'channel', cd: 6, max: 4, moveK: 0.55, defensive: true,
         desc: '누르는 동안 앞쪽에서 오는 적 탄을 모두 막고 정면 피해를 80% 줄임. 떼면 막아 낸 만큼 강해지는 방패 강타(앞 7m, 1초 기절)',
@@ -566,7 +561,6 @@
     trait: { name: '피의 갈증', desc: '잃은 체력만큼 피해와 공격 속도가 최대 50% 늘고, 근접 공격 피해의 6%만큼 체력을 회복합니다.' },
     basic: { name: '쌍도끼', icon: 'axe', desc: '앞쪽을 빠르게 베어 가르는 근접 연타', melee: { r: 3.0, arc: 2.3 }, knock: 4, sfx: 'swing' },
     stats(s) { s.maxHp = 140; s.armor += 2; s.speed *= 1.05; s.dmg = 21; s.fireRate = 2.6; s.crit += 0.05; },
-    cardOff: MELEE_OFF, cardAlt: MELEE_ALT,
     skills: [
       { name: '소용돌이', icon: 'whirl', kind: 'channel', cd: 7, max: 3, moveK: 0.85,
         desc: '누르는 동안 도끼를 휘두르며 회전: 주변 3.6m의 적을 초당 5번 베고, 받는 피해 25% 감소',
@@ -775,7 +769,8 @@
     trait: { name: '급소', desc: '체력이 30% 아래인 적에게 피해 1.5배(보스는 1.25배). 은신 중 첫 공격은 반드시 치명타에 피해 2.5배.' },
     basic: { name: '쌍단검', icon: 'dagger', desc: '두 단검을 번갈아 앞으로 빠르게 찌르는 근접 공격. 폭은 좁지만 3.6m까지 길게 닿음', melee: { r: 3.6, arc: 0.85 }, knock: 2, sfx: 'knife', color: 0xc8a0ff },
     stats(s) { s.maxHp = 90; s.armor += 1; s.speed *= 1.12; s.dmg = 18; s.fireRate = 4.2; s.crit += 0.08; s.critMult += 0.25; },
-    cardOff: MELEE_OFF, cardAlt: MELEE_ALT,
+    // daggers stab rather than swing
+    cardAlt: { sweep: { desc: '찌르는 폭 <b>+25%</b>, 근접 피해 <b>+20%</b>' }, flurry: { desc: '<b>30%</b> 확률로 한 번 더 찌름' } },
     skills: [
       { name: '그림자 걸음', icon: 'blink', kind: 'aim', cd: 4.5, range: 11, line: (ch, s) => ({ len: 11 * (0.9 + 0.1 * s.lanceWidth), w: 1.2 }),
         desc: '조준한 쪽으로 최대 11m 순간이동하며 지나간 길의 적을 벰. 2.5초 안의 다음 공격은 반드시 치명타',
@@ -1349,13 +1344,14 @@
   // a melee basic attack: one sweep in front (every machine draws it, the host deals it)
   const NOSW = {};
   CL.swing = function (h) {
-    const s = h.stats, b = CL.basicOf(h), m = b.melee, n = Math.max(1, s.projCount);
+    // '휩쓸기' widens and hardens every swing; the druid's bear paw also grows with its seed cards
+    const s = h.stats, b = CL.basicOf(h), m = b.melee, n = Math.max(1, s.projCount) + (s.sweep || 0);
     // a character may shape each swing (the blademaster's third cut, the druid's bear paw)
     const mod = (h.cls.swingMod && h.cls.swingMod(h)) || NOSW;
-    const r = m.r * (0.85 + 0.15 * s.projSize) * (mod.rK || 1), half = Math.min(Math.PI, (m.arc * (mod.arcK || 1) * (1 + 0.25 * (n - 1))) / 2);
+    const r = m.r * (0.85 + 0.15 * s.projSize) * (1 + (s.reach || 0)) * (mod.rK || 1), half = Math.min(Math.PI, (m.arc * (mod.arcK || 1) * (1 + 0.25 * (n - 1))) / 2);
     const a = Math.atan2(h.aimZ - h.z, h.aimX - h.x);
     h.swingSide = -(h.swingSide || 1);
-    swingFx(h, a, r, half, h.swingSide, mod.color || b.color || (m.r > 3.2 ? 0xffe6a0 : 0xffb090));
+    swingFx(h, a, r, half, h.swingSide, mod.color || b.color || (m.r > 3.2 ? 0xffe6a0 : 0xffb090), m.arc < 1.2);
     const sfx = mod.sfx || b.sfx || 'swing';
     if (h === G.Player) { G.Audio.play(sfx); G.UI.fireKick(); }
     else if (near(h.x, h.z) > 0.5) G.Audio.play(sfx);
@@ -1368,14 +1364,19 @@
       C.damage(t, dmg, { kx: dx / d, kz: dz / d, knock: kn, source: 'melee', procs: true, by: h, crit: sure });
     });
   };
-  function swingFx(h, a, r, half, side, color) {
+  function swingFx(h, a, r, half, side, color, thrust) {
     const y = h.y + 1.05, n = 14, c = tmpC.set(color);
-    if (half < 0.6) {
-      // a narrow weapon thrusts instead of sweeping: a streak straight down the aim, left hand then right
+    if (thrust || (thrust == null && half < 0.6)) {
+      // a narrow weapon thrusts instead of sweeping: a streak straight down the aim, left hand then right.
+      // A widened stab ('휩쓸기') fans out into two or three streaks across the cone it now covers.
       const px = -Math.sin(a) * 0.3 * side, pz = Math.cos(a) * 0.3 * side;
-      for (let i = 0; i <= 10; i++) {
-        const k = i / 10, d = 0.6 + k * (r - 0.4);
-        G.FX.P.emit(h.x + Math.cos(a) * d + px * (1 - k), y, h.z + Math.sin(a) * d + pz * (1 - k), Math.cos(a) * 7, 0.2, Math.sin(a) * 7, 0.08 + k * 0.08, 0.5 - k * 0.25, 0.03, c.r * 2.8, c.g * 2.8, c.b * 2.8, 1, 4, 0);
+      const ns = half < 0.6 ? 1 : half < 1 ? 2 : 3;
+      for (let j = 0; j < ns; j++) {
+        const aa = ns === 1 ? a : a + (j / (ns - 1) - 0.5) * 1.5 * half, ca = Math.cos(aa), sa = Math.sin(aa);
+        for (let i = 0; i <= 10; i++) {
+          const k = i / 10, d = 0.6 + k * (r - 0.4);
+          G.FX.P.emit(h.x + ca * d + px * (1 - k), y, h.z + sa * d + pz * (1 - k), ca * 7, 0.2, sa * 7, 0.08 + k * 0.08, 0.5 - k * 0.25, 0.03, c.r * 2.8, c.g * 2.8, c.b * 2.8, 1, 4, 0);
+        }
       }
       return;
     }
@@ -2839,7 +2840,7 @@
 
   // what the second book of characters (classes2.js) borrows from this one
   CL.kit = { def, scene, hy, vb, shows, mine, near, extra, eid, sid, stun, slow, lost, hpFrac, inCone, reach, freeSpot, markEnemy, later, mat, geo, std, glowM, addM, face, flap,
-    grow, dropMesh, addMat, ownMat, dropAll, outward, ultSpot, uid, ownerOf, SUM, V, fx, swingFx, MELEE_OFF, MELEE_ALT, R1, R2, TAU, NOOPT };
+    grow, dropMesh, addMat, ownMat, dropAll, outward, ultSpot, uid, ownerOf, SUM, V, fx, swingFx, R1, R2, TAU, NOOPT };
 
   CL.clear = function () {
     CL.zones.length = 0; CL.decoys.length = 0; CL.traps.length = 0; CL.mines.length = 0; CL.dmarks.length = 0;

@@ -61,11 +61,25 @@
     D('chrono', '느린 모래', 'hourglass', 'legendary', 1, () => '주변 7m 적과 적 탄 <b>35%</b> 느려짐', (s) => { s.chrono = 1; }),
     D('storm', '폭풍의 눈', 'storm', 'legendary', 1, () => '1.5초마다 주변 적 3명에게 <b>벼락</b>', (s) => { s.storm = 1; }),
     D('avatar', '파편 갑주', 'gem', 'legendary', 1, () => '궁극기 <b>+2초</b>, 궁극기 동안 <b>무적</b>', (s) => { s.avatar = 1; }),
+
+    // a melee fighter's own cards, drawn in place of the bolt cards (UP.fits)
+    D('sweep', '휩쓸기', 'sweep', 'epic', 4, () => '휘두르는 범위 <b>+25%</b>, 근접 피해 <b>+20%</b>', (s) => { s.sweep += 1; }),
+    D('reach', '깊은 내딛기', 'reach', 'common', 4, () => '공격 거리 <b>+7%</b>, 피해 <b>+6%</b>', (s) => { s.reach += 0.07; s.dmgMult += 0.06; }),
+    D('flurry', '연격', 'flurry', 'legendary', 1, () => '<b>30%</b> 확률로 한 번 더 휘두름', (s) => { s.echo = 0.3; }),
   ];
-  // basic-attack boosters (attack speed, bolt speed, more bolts, echoes) come up far less often than
-  // the other cards of their tier
-  const RARE_PICK = { rapid: 0.3, velocity: 0.3, multishot: 0.3, echo: 0.4 };
+  // basic-attack boosters (attack speed, bolt speed, more bolts, echoes, wider swings) come up far less
+  // often than the other cards of their tier
+  const RARE_PICK = { rapid: 0.3, velocity: 0.3, multishot: 0.3, echo: 0.4, sweep: 0.3, flurry: 0.4 };
   for (const d of defs) d.w = RARE_PICK[d.id] || 1;
+  // cards that only do something for bolts never reach a melee fighter, and the melee cards only reach them
+  const SHOT_ONLY = ['velocity', 'enlarge', 'multishot', 'pierce', 'seeker', 'ricochet', 'echo'];
+  const MELEE_ONLY = ['sweep', 'reach', 'flurry'];
+  for (const d of defs) d.only = SHOT_ONLY.includes(d.id) ? 'shot' : MELEE_ONLY.includes(d.id) ? 'melee' : null;
+  // how a card reads in a melee fighter's hand (it does the same thing)
+  const MELEE_WORD = {
+    volatile: { name: '폭렬 일격', desc: (l) => `<b>${12 + l * 8}%</b> 확률로 맞은 적 자리에서 폭발` },
+    precision: { name: '급소 노리기' },
+  };
   // skill cards follow the hero's character: the shard mage keeps these names, others get their own
   // skill's name and what the card does to it (skills[i].up)
   const SKILL_ALT = {
@@ -86,17 +100,25 @@
   ALL.forEach((d, i) => { d.code = CODES[i]; UP.byId[d.id] = d; UP.byCode[d.code] = d; });
 
   UP.level = (hero, id) => (hero.up.levels[id] || 0);
-  // a character can word a card its own way (a melee fighter's "more bolts" widens its swing)
+  // a melee fighter's basic attack is a swing (the druid counts as a shooter: it throws seeds until it turns bear)
+  UP.melee = (h) => !!(h && h.cls && h.cls.basic && h.cls.basic.melee);
+  UP.fits = (h, d) => !d.only || (d.only === 'melee') === UP.melee(h);
+  // a character can word a card its own way (the assassin stabs where others swing), and melee
+  // fighters read a few cards as blows rather than bolts
   const altFor = (d, h) => {
     const c = h && h.cls;
     if (!c) return null;
     const own = c.cardAlt && c.cardAlt[d.id];
-    if (own) return { name: own.name, desc: own.desc };
+    if (own) return own;
+    if (MELEE_WORD[d.id] && UP.melee(h)) return MELEE_WORD[d.id];
     const a = SKILL_ALT[d.id];
     return a && c.id !== 'shard' ? { name: a.name(c), desc: a.desc(c) } : null;
   };
   UP.nameOf = (d, h) => { const x = altFor(d, h); return (x && x.name) || d.name; };
-  UP.descOf = (d, lv, h) => { const x = altFor(d, h); return (x && x.desc) || d.desc(lv, h); };
+  UP.descOf = (d, lv, h) => {
+    const x = altFor(d, h), w = x && x.desc;
+    return w ? (typeof w === 'function' ? w(lv, h) : w) : d.desc(lv, h);
+  };
 
   // tier weights for this hero and this draw (forge luck lifts the upper tiers, chests skip the lower ones)
   UP.tierWeights = function (hero, opts = {}) {
@@ -119,9 +141,9 @@
 
   UP.roll = function (hero, n = 3, opts = {}) {
     const tw = UP.tierWeights(hero, opts);
-    // cards that do nothing for this character (homing for an axe) never come up
+    // cards that do nothing for this character (bolt speed for an axe) never come up
     const off = (hero.cls && hero.cls.cardOff) || [];
-    const pool = defs.filter((d) => UP.level(hero, d.id) < d.max && tw[d.rarity] > 0 && !off.includes(d.id));
+    const pool = defs.filter((d) => UP.level(hero, d.id) < d.max && tw[d.rarity] > 0 && !off.includes(d.id) && UP.fits(hero, d));
     const out = [];
     while (out.length < n && pool.length) {
       // a tier with nothing left to give drops out and the others share its chance

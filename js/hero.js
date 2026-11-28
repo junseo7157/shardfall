@@ -201,6 +201,7 @@
         lifestealKill: 0, burn: 0, frost: 0, chain: 0, explode: 0, homing: 0, ricochet: 0, blades: 0, drones: 0, thorns: 0,
         hunter: 0, berserk: 0, blinkNova: 0, meteorMult: 1, meteorRadius: 1, novaCdMult: 1, freezeDur: 1.3, lanceMult: 1,
         lanceWidth: 1, ultGain: 1, echo: 0, phoenix: 0, chrono: 0, storm: 0, avatar: 0, luck: 0, rerolls: 2, startBonus: 0,
+        sweep: 0, reach: 0,
       };
     }
 

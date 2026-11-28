@@ -12,7 +12,7 @@
 (() => {
   const G = window.G, U = G.U, C = G.Combat, HS = G.Heroes, CL = G.Classes, K = CL.kit;
   const { def, scene, hy, vb, shows, mine, near, extra, sid, stun, slow, inCone, reach, freeSpot, later, mat, geo, std, glowM, addM, face, flap, grow, dropMesh,
-    addMat, ownMat, dropAll, outward, ultSpot, uid, ownerOf, SUM, V, MELEE_OFF, MELEE_ALT, R1, R2, TAU } = K;
+    addMat, ownMat, dropAll, outward, ultSpot, uid, ownerOf, SUM, V, R1, R2, TAU } = K;
   CL.order.push('necro', 'gravity', 'druid', 'blademaster', 'bard');
 
   // a model's own materials: lit ones join the hero's (they flash when hit, fade in stealth, and
@@ -855,7 +855,6 @@
     trait: { name: '기세', desc: '칼이 적을 벨 때마다 기세 +1(최대 10), 기세 하나당 주는 피해 +2.5%. 맞으면 기세가 절반으로 줄고, 4초 동안 베지 못하면 조금씩 식습니다. 세 번째 휘두름마다 크게 벱니다.' },
     basic: { name: '태도', icon: 'katana', desc: '앞쪽을 베는 근접 공격. 세 번째 휘두름은 더 넓고 강한 큰 베기(×1.5)', melee: { r: 3.3, arc: 1.35 }, knock: 4, sfx: 'swing', color: 0xffd8a0 },
     stats(s) { s.maxHp = 120; s.armor += 2; s.speed *= 1.06; s.dmg = 22; s.fireRate = 2.5; s.crit += 0.06; },
-    cardOff: MELEE_OFF, cardAlt: MELEE_ALT,
     skills: [
       { name: '발도', icon: 'iai', kind: 'charge', cd: 7, chargeTime: 0.8, line: (ch, s) => ({ len: (5 + 7 * ch) * (0.9 + 0.1 * s.lanceWidth), w: 2.6 }),
         desc: '칼집에 손을 얹고 모았다가 떼면 조준한 쪽으로 최대 12m를 번개처럼 가르며 지나감(그동안 무적). 끝까지 모으면 반드시 치명타',
