@@ -10,7 +10,6 @@
   const tags = new Map();
   const cdLast = {}, cdMax = {};
   const ARM_MS = 700, COOP_PICK_S = 11;
-  const ARCH = 'M10 330V118C10 52 56 10 115 10s105 42 105 108v212z';
   const LOGO = (id) => `<svg viewBox="0 0 660 136" role="img" aria-label="SHARDFALL">
     <defs>
       <clipPath id="${id}a"><polygon points="0,0 660,0 660,60 520,66 470,52 405,80 330,64 250,86 170,70 95,90 0,74"/></clipPath>
@@ -294,7 +293,7 @@
     if (!grid.childElementCount) {
       grid.innerHTML = G.Classes.order.map((id) => {
         const c = G.Classes.get(id);
-        return `<button class="cls-card" data-c="${id}" style="--cc:${c.css}"><span class="cls-ico">${G.Icons.svg(c.emblem)}</span><b>${c.name}</b><small>${c.role}</small><i class="cls-who"></i></button>`;
+        return `<button class="cls-card" data-c="${id}" style="--cc:${c.css}">${clsWindow(id)}<span class="cls-ico">${G.Icons.svg(c.emblem)}</span><b>${c.name}</b><small>${c.role}</small><i class="cls-who"></i></button>`;
       }).join('');
       grid.addEventListener('click', (e) => {
         const b = e.target.closest('.cls-card');
@@ -327,6 +326,8 @@
     else setStatus('lobby-status', wait || '방장이 시작하기를 기다리는 중', !!wait && !wait.endsWith('...'));
   };
 
+  // each character's own stained-glass window (its colours, its pattern, its emblem in the middle)
+  const clsWindow = (id) => `<svg class="cls-win" viewBox="14 22 202 158" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${G.Icons.window(id, { medal: true })}</svg>`;
   // a character's sheet: how hard it is to play, trait, basic attack, three skills, ultimate
   const TIER = ['', '쉬움', '보통', '어려움'];
   function clsInfoHtml(c, extra = '') {
@@ -356,7 +357,7 @@
     if (!grid.childElementCount) {
       grid.innerHTML = G.Classes.order.map((id) => {
         const c = G.Classes.get(id);
-        return `<button class="cls-card" data-c="${id}" style="--cc:${c.css}"><span class="cls-ico">${G.Icons.svg(c.emblem)}</span><b>${c.name}</b><small>${c.role}</small><i class="cls-rec"></i></button>`;
+        return `<button class="cls-card" data-c="${id}" style="--cc:${c.css}">${clsWindow(id)}<span class="cls-ico">${G.Icons.svg(c.emblem)}</span><b>${c.name}</b><small>${c.role}</small><i class="cls-rec"></i></button>`;
       }).join('');
       grid.addEventListener('click', (e) => { const b = e.target.closest('.cls-card'); if (b) UI.pickSolo(b.dataset.c); });
       grid.addEventListener('dblclick', (e) => { const b = e.target.closest('.cls-card'); if (b) { UI.pickSolo(b.dataset.c); UI.show('diff'); } });
@@ -724,11 +725,14 @@
     c.restore();
   }
 
+  // a skill card shows the skill of the character holding it (the pyromancer's flame, not a lance)
+  const SKILL_CARD = { lance: 0, glacial: 1, meteor: 2 };
+  const cardIcon = (d, P) => (P && P.cls && SKILL_CARD[d.id] != null ? P.cls.skills[SKILL_CARD[d.id]].icon : d.icon);
   UI.renderUpgradeList = function () {
     const P = G.Player, UP = G.Upgrades;
     const html = P ? P.up.order.map((id) => {
       const d = UP.byId[id];
-      return `<div class="upg r-${d.rarity}" title="${U.esc(G.Upgrades.nameOf(d, P))}">${G.Icons.svg(d.icon)}<b>${P.up.levels[id]}</b></div>`;
+      return `<div class="upg r-${d.rarity}" title="${U.esc(G.Upgrades.nameOf(d, P))}">${G.Icons.svg(cardIcon(d, P))}<b>${P.up.levels[id]}</b></div>`;
     }).join('') : '';
     E['upgrade-list'].innerHTML = html;
     $('pause-build').innerHTML = html || '<span class="muted small">아직 고른 카드가 없어요</span>';
@@ -746,16 +750,14 @@
     UI.downIdx = -1;
     $('levelup-title').textContent = opts.title || '레벨 업';
     $('levelup-sub').textContent = opts.sub || '카드 한 장을 고르세요';
-    const P = G.Player, UP = G.Upgrades;
+    const P = G.Player, UP = G.Upgrades, cid = P.cls.id;
+    // every character draws its cards in its own glass
     E['levelup-cards'].innerHTML = cards.map((d, i) => {
       const lv = UP.level(P, d.id), fb = d.id[0] === '_';
       const lvTxt = fb ? '' : lv === 0 ? '처음 얻는 카드' : `${lv} → ${lv + 1}단계 · 최대 ${d.max}`;
-      return `<div class="card arming r-${d.rarity}" data-i="${i}">
-        <svg class="card-art" viewBox="0 0 230 340" preserveAspectRatio="none" aria-hidden="true">
-          <path class="glass" d="${ARCH}"/><path class="pane2" d="M115 10C66 10 30 40 18 86l97 60z"/><path class="pane3" d="M212 72c-14-34-50-62-97-62v136z"/>
-          <path class="lead" d="M115 10v136M18 86l97 60 97-74"/><path class="frame" d="${ARCH}"/>
-        </svg>
-        <div class="c-medal">${G.Icons.svg(d.icon)}</div>
+      return `<div class="card arming r-${d.rarity}" data-i="${i}" data-cls="${cid}" style="--cc:${P.cls.css}">
+        <svg class="card-art" viewBox="0 0 230 340" preserveAspectRatio="none" aria-hidden="true">${G.Icons.window(cid, { side: true, rim: true })}</svg>
+        <div class="c-medal">${G.Icons.svg(cardIcon(d, P))}</div>
         <div class="c-key">${i + 1}</div>
         <div class="c-plate"><div class="c-rarity">${UP.RARITY[d.rarity].kr}</div><div class="c-name">${UP.nameOf(d, P)}</div><div class="c-desc">${UP.descOf(d, lv + 1, P)}</div><div class="c-level">${lvTxt}</div></div>
         <div class="c-arm"><div></div></div>

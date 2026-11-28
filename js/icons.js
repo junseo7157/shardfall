@@ -150,5 +150,228 @@
       if (!cache[k]) cache[k] = `<svg class="ico ${cls}" viewBox="0 0 32 32" aria-hidden="true">${(D[name] || D.shard).map(part).join('')}</svg>`;
       return cache[k];
     },
+    // the parts alone, to set inside another drawing
+    parts: (name) => (D[name] || D.shard).map(part).join(''),
   };
+
+  // ============================================================
+  // Stained-glass windows, one look per character: the art of every level-up card a character
+  // draws, and the window on its card in the character picker. Each has its own colours, its own
+  // pattern of leaded glass and its own emblems, drawn in the 230x340 space of a card.
+  // ============================================================
+  const ARCH = 'M10 330V118C10 52 56 10 115 10s105 42 105 108v212z';
+  const ARCH_IN = 'M17 330V118C17 56 60 17 115 17s98 39 98 101v212z';
+  const TAU = Math.PI * 2, CX = 115, CY = 92, INK = '#15110d';
+  // colours: [main glass, pale glass, deep glass]; style: the pattern; ico: two emblems for the sides
+  const THEMES = {
+    shard: { c: ['#6f9ce8', '#cfe2ff', '#2f4f96'], style: 'diamonds', ico: ['shard', 'crystal'] },
+    guardian: { c: ['#e8b84e', '#fff0c0', '#9a6a16'], style: 'sunrays', ico: ['shield', 'hammer'] },
+    ranger: { c: ['#5fbf8a', '#d2f4df', '#25664a'], style: 'leaves', ico: ['bird', 'bow'] },
+    pyro: { c: ['#e8663a', '#ffc98a', '#8e2418'], style: 'flames', ico: ['flame', 'fire'] },
+    cleric: { c: ['#d8cfa8', '#ffffff', '#8f8358'], style: 'halo', ico: ['feather', 'halo'] },
+    berserker: { c: ['#c8553a', '#ffb49a', '#6e1c12'], style: 'cross', ico: ['axe', 'drop'] },
+    engineer: { c: ['#4fb8c8', '#ccf2f8', '#1f5f6c'], style: 'gears', ico: ['gear', 'turret'] },
+    assassin: { c: ['#7d5cc4', '#d8c8ff', '#2e1c5e'], style: 'night', ico: ['mask', 'dagger'] },
+    chrono: { c: ['#5cc8b4', '#d4fff4', '#1f6e60'], style: 'dial', ico: ['clock', 'hourglass'] },
+    gunslinger: { c: ['#d8a04e', '#ffe6b0', '#7e4a16'], style: 'sunset', ico: ['gun', 'coin'] },
+    necro: { c: ['#8fb84a', '#e2ffb0', '#2e4418'], style: 'bones', ico: ['skull', 'wisp'] },
+    gravity: { c: ['#a45ad8', '#ecc8ff', '#3e1c66'], style: 'orbits', ico: ['planet', 'blackhole'] },
+    druid: { c: ['#5aa848', '#d0f4b0', '#2c5420'], style: 'vines', ico: ['paw', 'leaf'] },
+    blademaster: { c: ['#e08a3a', '#ffdcb0', '#7a3410'], style: 'cuts', ico: ['katana', 'windblade'] },
+    bard: { c: ['#e07ab8', '#ffd8ee', '#7e2a62'], style: 'staff', ico: ['lute', 'notes'] },
+  };
+  const f1 = (v) => Math.round(v * 10) / 10;
+  const poly = (pts) => 'M' + pts.map(([x, y]) => f1(x) + ' ' + f1(y)).join('L') + 'Z';
+  const ring = (x, y, r) => `M${f1(x - r)} ${f1(y)}a${f1(r)} ${f1(r)} 0 1 0 ${f1(2 * r)} 0a${f1(r)} ${f1(r)} 0 1 0 ${f1(-2 * r)} 0`;
+  const at = (a, r, x = CX, y = CY) => [x + Math.cos(a) * r, y + Math.sin(a) * r];
+  const line = (a, b) => `M${f1(a[0])} ${f1(a[1])}L${f1(b[0])} ${f1(b[1])}`;
+  const flip = (pts) => pts.map(([x, y]) => [230 - x, y]);
+  // wedges of glass fanning out from a point
+  function fan(n, off = 0, x = CX, y = CY, k0 = 'b', k1 = 'a') {
+    const out = [];
+    for (let i = 0; i < n; i++) out.push([i % 2 ? k0 : k1, poly([[x, y], at(off + (i / n) * TAU, 320, x, y), at(off + ((i + 1) / n) * TAU, 320, x, y)])]);
+    return out;
+  }
+  function leaf(x, y, a, L, W) {
+    const tx = x + Math.cos(a) * L, ty = y + Math.sin(a) * L, mx = (x + tx) / 2, my = (y + ty) / 2, nx = -Math.sin(a) * W, ny = Math.cos(a) * W;
+    return `M${f1(x)} ${f1(y)}Q${f1(mx + nx)} ${f1(my + ny)} ${f1(tx)} ${f1(ty)}Q${f1(mx - nx)} ${f1(my - ny)} ${f1(x)} ${f1(y)}Z`;
+  }
+  function star4(x, y, r) { return poly([[x, y - r], [x + r * 0.28, y - r * 0.28], [x + r, y], [x + r * 0.28, y + r * 0.28], [x, y + r], [x - r * 0.28, y + r * 0.28], [x - r, y], [x - r * 0.28, y - r * 0.28]]); }
+  function gear(x, y, r, n) {
+    const pts = [];
+    for (let i = 0; i < n * 2; i++) { const a = (i / (n * 2)) * TAU, rr = i % 2 ? r * 0.78 : r; pts.push(at(a - 0.12, rr, x, y), at(a + 0.12, rr, x, y)); }
+    return poly(pts);
+  }
+  function flame(x, w, top, lean, base = 210) {
+    const m = (base + top) / 2 + 8;
+    return `M${f1(x - w)} ${base}C${f1(x - w)} ${f1(m)} ${f1(x + lean - w * 0.25)} ${f1(top + 34)} ${f1(x + lean)} ${f1(top)}C${f1(x + lean + w * 0.25)} ${f1(top + 34)} ${f1(x + w)} ${f1(m)} ${f1(x + w)} ${base}Z`;
+  }
+  const ellipse = (x, y, rx, ry, deg) => {
+    const a = (deg * Math.PI) / 180, dx = Math.cos(a) * rx, dy = Math.sin(a) * rx;
+    return `M${f1(x - dx)} ${f1(y - dy)}A${rx} ${ry} ${deg} 1 0 ${f1(x + dx)} ${f1(y + dy)}A${rx} ${ry} ${deg} 1 0 ${f1(x - dx)} ${f1(y - dy)}`;
+  };
+  const both = (fn) => [...fn(1), ...fn(-1)];
+  // the patterns; parts are [kind, path]: a/b/c glass (main, pale, deep) leaded in ink, w a glint,
+  // k ink, l a lead line, sb/sc a thick band of pale/deep glass (outlined), bone a bone
+  const STYLES = {
+    diamonds() {
+      const out = [];
+      for (let r = -1; r < 6; r++) for (let q = -1; q < 7; q++) {
+        const x = q * 40 + (r % 2 ? 20 : 0), y = r * 44 + 10;
+        out.push([(q + r) % 3 === 0 ? 'b' : (q + r) % 3 === 1 ? 'a' : 'c', poly([[x, y - 22], [x + 20, y], [x, y + 22], [x - 20, y]])]);
+      }
+      out.push(...both((s) => [['w', poly(s > 0 ? [[22, 205], [34, 120], [44, 205]] : flip([[22, 205], [34, 120], [44, 205]]))], ['b', poly(s > 0 ? [[44, 205], [58, 150], [66, 205]] : flip([[44, 205], [58, 150], [66, 205]]))]]));
+      return out;
+    },
+    sunrays() {
+      return [...fan(20, -Math.PI / 2), ['l', ring(CX, CY, 78)], ['sb', ring(CX, CY, 90)], ['l', ring(CX, CY, 104)]];
+    },
+    halo() {
+      const out = [...fan(32, 0.05, CX, CY, 'b', 'a'), ['sb', ring(CX, CY, 66)], ['w', ring(CX, CY, 64)]];
+      for (const [x, y] of [[34, 70], [196, 70], [40, 150], [190, 150]]) out.push(['b', poly([[x - 4, y - 14], [x + 4, y - 14], [x + 4, y - 4], [x + 14, y - 4], [x + 14, y + 4], [x + 4, y + 4], [x + 4, y + 14], [x - 4, y + 14], [x - 4, y + 4], [x - 14, y + 4], [x - 14, y - 4], [x - 4, y - 4]])]);
+      return out;
+    },
+    leaves() {
+      const out = [];
+      for (let i = 0; i < 10; i++) out.push([i % 2 ? 'a' : 'c', poly([[10 + i * 21, 10], [31 + i * 21, 10], [31 + i * 21, 330], [10 + i * 21, 330]])]);
+      out.push(...both((s) => {
+        const o = [], X = (x) => (s > 0 ? x : 230 - x);
+        o.push(['l', `M${X(20)} 210Q${X(18)} 120 ${X(70)} 40`]);
+        for (let i = 0; i < 7; i++) {
+          const t = i / 6, x = X(20 + t * 46 - Math.sin(t * Math.PI) * 6), y = 200 - t * 150, side = i % 2 ? 1 : -1;
+          o.push([i % 3 ? 'b' : 'a', leaf(x, y, (s > 0 ? -Math.PI / 2 : -Math.PI / 2) + side * 0.9 * s, 26, 9)]);
+        }
+        return o;
+      }));
+      return out;
+    },
+    flames() {
+      const out = [...fan(14, -Math.PI / 2, CX, 220, 'c', 'a')];
+      out.push(...both((s) => {
+        const X = (x) => (s > 0 ? x : 230 - x), L = s > 0 ? 1 : -1;
+        return [['c', flame(X(30), 20, 36, 6 * L)], ['a', flame(X(64), 16, 70, -4 * L)], ['b', flame(X(30), 10, 76, 4 * L)], ['b', flame(X(64), 8, 108, -2 * L)], ['w', flame(X(30), 4, 120, 2 * L)]];
+      }));
+      out.push(['b', flame(115, 22, 150, 0, 214)], ['w', flame(115, 9, 168, 0, 214)]);
+      return out;
+    },
+    cross() {
+      const out = [...fan(8, Math.PI / 8, CX, CY, 'c', 'a')];
+      out.push(['sb', line([-20, 0], [250, 250])], ['sb', line([250, 0], [-20, 250])]);
+      for (const [x, y] of [[30, 140], [200, 140], [50, 176], [180, 176], [115, 176]]) out.push(['c', `M${x} ${y - 10}C${x + 7} ${y - 1} ${x + 7} ${y + 9} ${x} ${y + 9}C${x - 7} ${y + 9} ${x - 7} ${y - 1} ${x} ${y - 10}Z`]);
+      return out;
+    },
+    gears() {
+      const out = [];
+      for (let r = 0; r < 9; r++) for (let q = 0; q < 6; q++) out.push([(q + r) % 2 ? 'a' : 'c', poly([[10 + q * 36, 10 + r * 36], [46 + q * 36, 10 + r * 36], [46 + q * 36, 46 + r * 36], [10 + q * 36, 46 + r * 36]])]);
+      for (const [x, y, rr, n] of [[38, 62, 27, 9], [194, 62, 27, 9], [26, 150, 18, 7], [206, 150, 18, 7]]) out.push(['b', gear(x, y, rr, n)], ['a', ring(x, y, rr * 0.45)], ['k', ring(x, y, rr * 0.16)]);
+      out.push(['l', 'M64 186h18v-26h14'], ['l', 'M166 186h-18v-26h-14'], ['k', ring(96, 160, 4)], ['k', ring(134, 160, 4)]);
+      return out;
+    },
+    night() {
+      const out = [['c', 'M0 0H230V340H0Z'], ['a', ring(46, 52, 30)], ['c', ring(60, 44, 26)]];
+      for (const [x, y, r] of [[186, 40, 9], [204, 92, 6], [160, 22, 5], [24, 120, 6], [206, 150, 8], [40, 176, 5], [182, 186, 5]]) out.push([r > 6 ? 'b' : 'w', star4(x, y, r)]);
+      out.push(...both((s) => {
+        const P = (pts) => poly(s > 0 ? pts : flip(pts));
+        return [['b', P([[18, 206], [30, 150], [36, 152], [30, 208]])], ['k', P([[14, 152], [44, 160], [42, 166], [12, 158]])]];
+      }));
+      return out;
+    },
+    dial() {
+      const out = [...fan(12, -Math.PI / 2 + Math.PI / 12, CX, CY, 'a', 'b'), ['sb', ring(CX, CY, 70)], ['l', ring(CX, CY, 86)]];
+      for (let i = 0; i < 12; i++) { const a = -Math.PI / 2 + (i / 12) * TAU; out.push(['l', line(at(a, 60), at(a, i % 3 ? 74 : 82))]); }
+      out.push(...both((s) => { const P = (pts) => poly(s > 0 ? pts : flip(pts)); return [['b', P([[14, 160], [52, 160], [33, 186]])], ['c', P([[14, 212], [52, 212], [33, 186]])]]; }));
+      return out;
+    },
+    sunset() {
+      const out = [['c', 'M0 0H230V44H0Z'], ['a', 'M0 44H230V88H0Z'], ['b', 'M0 88H230V128H0Z'], ['a', 'M0 128H230V170H0Z'], ['c', 'M0 170H230V340H0Z']];
+      out.push(['b', ring(CX, CY, 74)]);
+      for (let i = 0; i < 9; i++) { const a = Math.PI + (i / 8) * Math.PI; out.push(['l', line(at(a, 80), at(a, 112))]); }
+      out.push(['c', poly([[10, 214], [10, 150], [40, 150], [44, 166], [70, 166], [74, 214]])], ['c', poly(flip([[10, 214], [10, 158], [34, 158], [38, 174], [62, 174], [66, 214]]))]);
+      return out;
+    },
+    bones() {
+      const out = [];
+      for (let i = 0; i < 7; i++) out.push([i % 2 ? 'c' : 'a', poly([[10 + i * 30, 330], [10 + i * 30, 44], [25 + i * 30, 26], [40 + i * 30, 44], [40 + i * 30, 330]])]);
+      for (let i = 0; i < 4; i++) out.push(['l', `M${50 - i * 6} ${34 + i * 12}Q115 ${-4 + i * 12} ${180 + i * 6} ${34 + i * 12}`]);
+      out.push(['bone', [20, 120, 60, 176]], ['bone', [60, 120, 20, 176]], ['bone', [170, 120, 210, 176]], ['bone', [210, 120, 170, 176]]);
+      for (const x of [40, 190]) out.push(['b', ring(x, 92, 11)], ['k', ring(x - 4, 91, 2.6) + ring(x + 4, 91, 2.6)]);
+      return out;
+    },
+    orbits() {
+      const out = [...fan(10, 0.2, CX, CY, 'c', 'a')];
+      for (const [rx, ry, d] of [[104, 30, -18], [96, 26, 24], [112, 40, 64]]) out.push(['sb', ellipse(CX, CY, rx, ry, d)]);
+      for (const [x, y, r] of [[22, 66, 10], [206, 116, 8], [62, 174, 7], [176, 30, 6], [190, 172, 5]]) out.push(['b', ring(x, y, r)], ['w', ring(x - r * 0.3, y - r * 0.3, r * 0.35)]);
+      return out;
+    },
+    vines() {
+      const out = [...fan(8, -Math.PI / 2, CX, 260, 'a', 'c')];
+      out.push(...both((s) => {
+        const X = (x) => (s > 0 ? x : 230 - x);
+        const o = [['l', `M${X(26)} 214C${X(10)} 150 ${X(60)} 120 ${X(40)} 80S${X(60)} 24 ${X(96)} 24`], ['l', `M${X(40)} 80c${s * -18} -4 ${s * -22} 14 ${s * -10} 22s${s * 18} 2 ${s * 12} -10`]];
+        for (const [x, y, a] of [[26, 190, -2.2], [30, 150, -0.6], [48, 110, -2.4], [44, 62, -0.5], [74, 30, -2.6]]) o.push([y % 4 ? 'b' : 'a', leaf(X(x), y, s > 0 ? a : Math.PI - a, 24, 11)]);
+        return o;
+      }));
+      return out;
+    },
+    cuts() {
+      const out = [['b', 'M0 0H230V64H0Z'], ['a', 'M0 64H230V130H0Z'], ['c', 'M0 130H230V340H0Z']];
+      for (const [x0, y0, w] of [[-30, 150, 9], [-10, 200, 6], [40, 210, 5]]) {
+        const a = -0.62, dx = Math.cos(a) * 340, dy = Math.sin(a) * 340, nx = -Math.sin(a) * w, ny = Math.cos(a) * w;
+        out.push(['w', poly([[x0 - nx, y0 - ny], [x0 + dx - nx, y0 + dy - ny], [x0 + dx + nx, y0 + dy + ny], [x0 + nx, y0 + ny]])]);
+      }
+      out.push(['l', 'M14 120q30 -22 60 -6'], ['l', 'M156 168q30 -22 60 -6'], ['l', 'M150 40q24 -18 50 -4']);
+      return out;
+    },
+    staff() {
+      const out = [];
+      for (let i = 0; i < 6; i++) out.push([i % 2 ? 'a' : 'b', `M0 ${f1(10 + i * 38)}Q57 ${f1(-6 + i * 38)} 115 ${f1(10 + i * 38)}T230 ${f1(10 + i * 38)}V${f1(48 + i * 38)}Q173 ${f1(64 + i * 38)} 115 ${f1(48 + i * 38)}T0 ${f1(48 + i * 38)}Z`]);
+      for (let i = 0; i < 5; i++) out.push(['l', `M8 ${150 + i * 9}C70 ${128 + i * 9} 160 ${178 + i * 9} 222 ${152 + i * 9}`]);
+      for (const [x, y] of [[40, 150], [74, 162], [158, 168], [192, 158]]) out.push(['k', ellipse(x, y, 7, 5, -20)], ['l', `M${x + 6} ${y - 2}v-34`]);
+      out.push(['l', 'M198 124l14 -6'], ['b', star4(30, 62, 9)], ['b', star4(200, 62, 9)]);
+      return out;
+    },
+  };
+  function paint(parts, th) {
+    const [ca, cb, cc] = th.c;
+    const col = { a: ca, b: cb, c: cc };
+    return parts.map(([k, d]) => {
+      if (k === 'l') return `<path d="${d}" fill="none" stroke="${INK}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>`;
+      if (k === 'w') return `<path d="${d}" fill="#fff" fill-opacity=".5" stroke="${INK}" stroke-width="2"/>`;
+      if (k === 'k') return `<path d="${d}" fill="${INK}"/>`;
+      if (k === 'sb' || k === 'sc') return `<path d="${d}" fill="none" stroke="${INK}" stroke-width="15" stroke-linecap="round"/><path d="${d}" fill="none" stroke="${k === 'sb' ? cb : cc}" stroke-width="9" stroke-linecap="round"/>`;
+      if (k === 'bone') {
+        const [x1, y1, x2, y2] = d, L = `M${x1} ${y1}L${x2} ${y2}`, dx = x2 - x1, dy = y2 - y1, l = Math.hypot(dx, dy), nx = (-dy / l) * 4.5, ny = (dx / l) * 4.5;
+        const knobs = [[x1, y1], [x2, y2]].map(([x, y]) => ring(x + nx, y + ny, 5.5) + ring(x - nx, y - ny, 5.5)).join('');
+        return `<path d="${L}" stroke="${INK}" stroke-width="13" stroke-linecap="round"/><path d="${knobs}" fill="${cb}" stroke="${INK}" stroke-width="2.5"/><path d="${L}" stroke="${cb}" stroke-width="7" stroke-linecap="round"/>`;
+      }
+      return `<path d="${d}" fill="${col[k]}" fill-rule="evenodd" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/>`;
+    }).join('');
+  }
+  let winN = 0;
+  const winCache = {};
+  // o.side: the two emblems on each side (cards); o.medal: the character's emblem in the middle
+  // (the picker); o.rim: a rarity-coloured rim inside the frame (var(--g), set by the card)
+  G.Icons.window = function (id, o = {}) {
+    const th = THEMES[id] || THEMES.shard, key = id + '|' + (o.side ? 1 : 0) + (o.medal ? 1 : 0);
+    if (!winCache[key]) {
+      let art = paint(STYLES[th.style](), th);
+      if (o.side) {
+        // little medallions of the character's emblems, set into the glass at both sides
+        for (const [x, y, s, r, n] of [[38, 62, 38, -10, 0], [36, 150, 30, 8, 1], [192, 62, 38, 10, 0], [194, 150, 30, -8, 1]]) {
+          art += `<circle cx="${x}" cy="${y}" r="${s / 2 + 5}" fill="${th.c[1]}" stroke="${INK}" stroke-width="3.5"/>` +
+            `<g transform="translate(${x - s / 2} ${y - s / 2}) scale(${s / 32}) rotate(${r} 16 16)" style="--ia:${th.c[0]};--ib:${th.c[1]};--ik:${INK}">${G.Icons.parts(th.ico[n])}</g>`;
+        }
+      }
+      if (o.medal) {
+        const emb = (G.Classes && G.Classes.list[id] && G.Classes.list[id].emblem) || th.ico[0];
+        art += `<circle cx="${CX}" cy="${CY}" r="50" fill="${th.c[1]}" stroke="${INK}" stroke-width="6"/><circle cx="${CX}" cy="${CY}" r="56" fill="none" stroke="${th.c[2]}" stroke-width="3"/>` +
+          `<g transform="translate(${CX - 34} ${CY - 34}) scale(${68 / 32})" style="--ia:${th.c[0]};--ib:#fff;--ik:${INK}">${G.Icons.parts(emb)}</g>`;
+      }
+      winCache[key] = art;
+    }
+    const cid = 'cw' + ++winN;
+    return `<defs><clipPath id="${cid}"><path d="${ARCH}"/></clipPath></defs><path d="${ARCH}" fill="${th.c[0]}"/>` +
+      `<g clip-path="url(#${cid})">${winCache[key]}</g>` + (o.rim ? `<path d="${ARCH_IN}" fill="none" stroke="var(--g)" stroke-width="6"/>` : '') + `<path d="${ARCH}" fill="none" stroke="${INK}" stroke-width="9" stroke-linejoin="round"/>`;
+  };
+  G.Icons.theme = (id) => THEMES[id] || THEMES.shard;
 })();
