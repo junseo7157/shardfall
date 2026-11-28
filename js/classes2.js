@@ -77,7 +77,7 @@
           });
         } },
     ],
-    ult: { name: '망자의 문', icon: 'gate', desc: '조준한 곳에 거대한 뼈의 문을 세움: 6초 동안 해골 전사 12구가 줄지어 쏟아져 나와 적에게 달려들고, 문이 닫히는 순간 모은 영혼을 모두 터뜨려 6m를 휩쓰는 영혼 폭발(영혼 하나당 +15%)' },
+    ult: { name: '망자의 문', icon: 'gate', desc: '조준한 곳에 거대한 뼈의 문을 세움: 6초 동안 해골 전사 10구가 줄지어 쏟아져 나와 적에게 달려들고, 문이 닫히는 순간 모은 영혼을 모두 터뜨려 6m를 휩쓰는 영혼 폭발(영혼 하나당 +15%)' },
     // a soul for every death close by (the host counts them; the gauge reaches the player with its hero)
     onNearKill(h, e) {
       if ((h.res || 0) >= 10 || U.dist2(h.x, h.z, e.x, e.z) > NK_SOUL_R * NK_SOUL_R) return;
@@ -89,8 +89,8 @@
       h.res = 0;
       G.Net.vis('ultFx', 'necro', R1(h.x), R1(h.z), h.key);
       G.Net.vis('nkGate', id, R1(p.x), R1(p.z), R2(fa), 6.5, h.key);
-      for (let k = 0; k < 12; k++) {
-        G.Enemies.later(0.7 + k * 0.42, () => {
+      for (let k = 0; k < 10; k++) {
+        G.Enemies.later(0.7 + k * 0.5, () => {
           const b = fa + U.rand(-0.9, 0.9), q = freeSpot(p.x + Math.cos(b) * 1.8, p.z + Math.sin(b) * 1.8, 0.45);
           G.Net.vis('nkSkel', id + '-' + k, R1(q.x), R1(q.z), 6, 1, h.key);
         });
@@ -215,7 +215,7 @@
         s.atkCd = 0.75; s.atk = 0.3;
         if (G.auth()) {
           const st = o.stats, q = s.near;
-          C.damage(q, 14 * st.dmgMult * (s.ult ? 0.8 : st.lanceMult), { kx: q.x - s.x, kz: q.z - s.z, knock: 2.5, source: s.ult ? 'ult' : 'minion', by: o });
+          C.damage(q, 14 * st.dmgMult * (s.ult ? 0.65 : st.lanceMult), { kx: q.x - s.x, kz: q.z - s.z, knock: 2.5, source: s.ult ? 'ult' : 'minion', by: o });
         }
         if (near(s.x, s.z) > 0.45) G.Audio.play('boneHit');
       }
@@ -366,7 +366,7 @@
     id: 'gravity', tier: 3, name: '중력술사', role: '적을 한데 끌어모아 짓누르는 마법사', emblem: 'planet', css: '#c87ae8', energy: 0xc87aff, ultDur: 4.2,
     trait: { name: '압축', desc: '6m 안의 적 하나당 주는 피해 +4%(최대 +32%). 중력탄에 맞은 적 둘레 3m의 적은 맞은 자리로 끌려옵니다.' },
     basic: { name: '중력탄', icon: 'orb', desc: '맞은 자리로 둘레의 적을 끌어당기는 보랏빛 구체', spread: 0.1 },
-    stats(s) { s.maxHp = 95; s.dmg = 17; s.fireRate = 3.4; s.projSpeed = 30; s.projLife = 0.75; s.projSize = 1.15; },
+    stats(s) { s.maxHp = 95; s.dmg = 16; s.fireRate = 3.4; s.projSpeed = 30; s.projLife = 0.75; s.projSize = 1.15; },
     skills: [
       { name: '중력 구체', icon: 'gravorb', kind: 'charge', cd: 7, chargeTime: 1, line: (ch, s) => ({ len: 14, w: (2.4 + ch * 2.2) * (0.9 + 0.1 * s.lanceWidth) }),
         desc: '모을수록 커지는 중력 구체를 천천히 굴려 보냄: 14m를 가는 동안 둘레의 적을 계속 빨아들이며 피해를 주고, 끝에서 안으로 무너지며 터짐',
@@ -553,7 +553,7 @@
         }
         if (G.auth()) {
           const st = o.stats;
-          if (B) C.forEachTarget(s.x, s.z, 10, (q) => { const [kx, kz] = outward(q, s.x, s.z); C.damage(q, 180 * st.dmgMult, { kx, kz, knock: 24, source: 'ult', by: o }); });
+          if (B) C.forEachTarget(s.x, s.z, 10, (q) => { const [kx, kz] = outward(q, s.x, s.z); C.damage(q, 130 * st.dmgMult, { kx, kz, knock: 24, source: 'ult', by: o }); });
           else C.forEachTarget(s.x, s.z, R, (q) => C.damage(q, 50 * st.meteorMult * st.dmgMult, { source: 'skill', by: o }));
         }
       }
@@ -568,7 +568,7 @@
       if (s.tick <= 0) {
         s.tick = 0.25;
         const st = o.stats;
-        C.forEachTarget(s.x, s.z, R, (q) => C.damage(q, (B ? 8 * (q.isBoss || q.elite ? 1.5 : 1) : 11 * st.meteorMult) * st.dmgMult, { canCrit: false, source: B ? 'ult' : 'skill', by: o }));
+        C.forEachTarget(s.x, s.z, R, (q) => C.damage(q, (B ? 7 * (q.isBoss || q.elite ? 1.5 : 1) : 10 * st.meteorMult) * st.dmgMult, { canCrit: false, source: B ? 'ult' : 'skill', by: o }));
       }
     },
     end(s) { dropAll(s); },
@@ -584,7 +584,7 @@
     id: 'druid', tier: 3, name: '드루이드', role: '사람과 곰을 오가는 숲의 수호자', emblem: 'paw', css: '#7ec85a', energy: 0x9fe86a, ultDur: 8, orb: false,
     trait: { name: '두 개의 모습', desc: '사람일 때는 가시 씨앗을 쏘고 숲으로 치유하며, 곰일 때는 받는 피해가 25% 줄고 발톱으로 싸웁니다. 모습을 바꿀 때마다 3초 동안 이동 속도 +25%, 체력 5% 회복.' },
     basic: { name: '가시 씨앗', icon: 'thorn', desc: '사람: 두 갈래로 날아가 맞은 적을 잠깐 느리게 하는 가시 씨앗 · 곰: 앞쪽을 넓게 할퀴는 발톱', spread: 0.14 },
-    bear: { name: '곰 발톱', icon: 'claw', desc: '앞쪽을 넓게 할퀴어 밀쳐 내는 곰의 발톱', melee: { r: 3.3, arc: 2.2 }, knock: 7, sfx: 'swingHeavy', dmgK: 2.7, color: 0xe8c890 },
+    bear: { name: '곰 발톱', icon: 'claw', desc: '앞쪽을 넓게 할퀴어 밀쳐 내는 곰의 발톱', melee: { r: 3.3, arc: 2.2 }, knock: 7, sfx: 'swingHeavy', dmgK: 2.3, color: 0xe8c890 },
     basicOf: (h) => (h.form === 1 ? h.cls.bear : h.cls.basic),
     stats(s) { s.maxHp = 115; s.armor += 1; s.dmg = 11; s.fireRate = 3.6; s.projSpeed = 30; s.projLife = 0.7; s.projCount = 2; s.projSize = 0.9; },
     skills: [
@@ -604,7 +604,7 @@
         view: (h) => (h.form === 1 ? DR_BEAR_S3 : null),
         use(h, a) { if ((a.ch || 0) >= 0.5) bearQuake(h, a); else grove(h, a); } },
     ],
-    ult: { name: '세계수 강림', icon: 'worldtree', desc: '그 자리에 8초 동안 거대한 세계수가 솟아남: 솟는 순간 9m 안의 적을 뿌리로 휘감아 2초 묶고 피해. 나무 그늘(9m) 안의 동료는 초당 최대 체력 2% 회복과 주는 피해 +20%, 적은 40% 느려지고 매초 가시 뿌리 셋이 적을 꿰뚫음' },
+    ult: { name: '세계수 강림', icon: 'worldtree', desc: '그 자리에 8초 동안 거대한 세계수가 솟아남: 솟는 순간 9m 안의 적을 뿌리로 휘감아 2초 묶고 피해. 나무 그늘(9m) 안의 동료는 초당 최대 체력 1.5% 회복과 주는 피해 +15%, 적은 40% 느려지고 매초 가시 뿌리 둘이 적을 꿰뚫음' },
     // which form cast it travels with the cast (so the host runs the same one); the change carries the new form
     castArgs(h, i, a) { a.ch = i === 2 ? (h.form ? 0 : 1) : h.form ? 1 : 0; },
     flags: (h) => (h.form ? 1 : 0),
@@ -619,7 +619,7 @@
       const s = h.stats, x = R1(h.x), z = R1(h.z);
       G.Net.vis('ultFx', 'druid', x, z, h.key);
       G.Net.vis('drTree', uid(h), x, z, 9, 8, h.key);
-      C.forEachTarget(x, z, 9, (t) => { C.damage(t, 80 * s.dmgMult, { source: 'ult', by: h }); if (t.isBoss) slow(t, 0.5, 2); else if (t.rootFor) t.rootFor(2); });
+      C.forEachTarget(x, z, 9, (t) => { C.damage(t, 60 * s.dmgMult, { source: 'ult', by: h }); if (t.isBoss) slow(t, 0.5, 2); else if (t.rootFor) t.rootFor(2); });
     },
     ultTick(h) { h.ultTick = 1; },
     model(h, add, M) {
@@ -794,7 +794,7 @@
       g.position.set(s.x, s.y, s.z);
       g.scale.setScalar(0.01);
       scene().add(g);
-      s.buff = 1.2; s.slowK = 0.6; s.tick = 0.3; s.thorn = 0.8;
+      s.buff = 1.15; s.slowK = 0.6; s.tick = 0.3; s.thorn = 0.8;
       G.FX.explosion(s.x, s.y, s.z, 5, 0x9fe86a, 0.5 * near(s.x, s.z));
       G.FX.gibs(s.x, s.y + 0.5, s.z, 0x5a4a32, 18, 0.35, 12);
       G.FX.pillar(s.x, s.z, 0xd8ff9a, 90, 14);
@@ -816,17 +816,17 @@
       s.tick -= dt;
       if (s.tick <= 0) {
         s.tick = 0.5;
-        for (const h of HS.list) if (h.alive && U.dist2(h.x, h.z, s.x, s.z) < s.r * s.r) h.heal(h.stats.maxHp * 0.01, true, o);
+        for (const h of HS.list) if (h.alive && U.dist2(h.x, h.z, s.x, s.z) < s.r * s.r) h.heal(h.stats.maxHp * 0.0075, true, o);
       }
       s.thorn -= dt;
       if (s.thorn > 0 || idle) return;
       s.thorn = 1;
       const list = [];
       C.forEachTarget(s.x, s.z, s.r, (q) => list.push(q));
-      for (let k = 0; k < 3 && list.length; k++) {
+      for (let k = 0; k < 2 && list.length; k++) {
         const q = list.splice(Math.floor(Math.random() * list.length), 1)[0];
         G.Net.vis('drRoot', R1(q.x), R1(q.z));
-        C.damage(q, 50 * st.dmgMult, { source: 'ult', by: o, knock: 3, kx: q.x - s.x, kz: q.z - s.z });
+        C.damage(q, 45 * st.dmgMult, { source: 'ult', by: o, knock: 3, kx: q.x - s.x, kz: q.z - s.z });
       }
     },
     end(s) {
@@ -848,12 +848,12 @@
   // ======================================================================
   const BM = { T0: 0.08, STEP: 0.16 };
   BM.SHEATH = BM.T0 + 3 * BM.STEP + 0.45;
-  const BM_BIG = { dmgK: 1.6, rK: 1.15, arcK: 1.25, knockK: 2.2, color: 0xffffff, sfx: 'unsheathe' };
+  const BM_BIG = { dmgK: 1.5, rK: 1.15, arcK: 1.25, knockK: 2.2, color: 0xffffff, sfx: 'unsheathe' };
   def({
     id: 'blademaster', tier: 3, name: '검성', role: '기세를 타고 베어 넘기는 검객', emblem: 'katana', css: '#f0a050', energy: 0xffb060, ultDur: 1.4, orb: false,
     resource: { max: 10, name: '기세' },
     trait: { name: '기세', desc: '칼이 적을 벨 때마다 기세 +1(최대 10), 기세 하나당 주는 피해 +2.5%. 맞으면 기세가 절반으로 줄고, 4초 동안 베지 못하면 조금씩 식습니다. 세 번째 휘두름마다 크게 벱니다.' },
-    basic: { name: '태도', icon: 'katana', desc: '앞쪽을 베는 근접 공격. 세 번째 휘두름은 더 넓고 강한 큰 베기(×1.6)', melee: { r: 3.3, arc: 1.5 }, knock: 4, sfx: 'swing', color: 0xffd8a0 },
+    basic: { name: '태도', icon: 'katana', desc: '앞쪽을 베는 근접 공격. 세 번째 휘두름은 더 넓고 강한 큰 베기(×1.5)', melee: { r: 3.3, arc: 1.35 }, knock: 4, sfx: 'swing', color: 0xffd8a0 },
     stats(s) { s.maxHp = 120; s.armor += 2; s.speed *= 1.06; s.dmg = 22; s.fireRate = 2.5; s.crit += 0.06; },
     cardOff: MELEE_OFF, cardAlt: MELEE_ALT,
     skills: [
@@ -1050,7 +1050,7 @@
     id: 'bard', tier: 2, name: '음유시인', role: '노래로 모두를 북돋는 지원가', emblem: 'lute', css: '#f59ad2', energy: 0xff9ad8, ultDur: 7,
     trait: { name: '공명', desc: '지금 부르는 노래가 10m 안의 모든 동료(자신 포함)에게 닿습니다. 전진의 노래: 공격 속도 +18% · 치유의 노래: 초당 체력 2 회복 · 바람의 노래: 이동 속도 +15%, 스킬 대기시간 20% 빨리 돎.' },
     basic: { name: '음표', icon: 'notes', desc: '맞으면 다음 적에게 한 번 튕겨 가는 음표(지금 노래의 색)', spread: 0.1, sfx: 'note' },
-    stats(s) { s.maxHp = 100; s.dmg = 17; s.fireRate = 3.5; s.projSpeed = 28; s.projLife = 0.75; s.projSize = 1.0; s.ricochet += 1; },
+    stats(s) { s.maxHp = 100; s.dmg = 13.5; s.fireRate = 3.0; s.projSpeed = 28; s.projLife = 0.75; s.projSize = 1.0; s.ricochet += 1; },
     skills: [
       { name: '불협화음', icon: 'discord', kind: 'aim', cd: 6, range: 8, line: (ch, s) => ({ len: 8 * (0.9 + 0.1 * s.lanceWidth), w: 6 }),
         desc: '조준한 쪽 부채꼴(8m)로 귀를 찢는 불협화음: 피해를 주고 멀리 밀쳐 내며 2초 동안 40% 느리게 함',

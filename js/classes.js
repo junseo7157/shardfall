@@ -130,12 +130,13 @@
     id: 'shard', tier: 1, name: '파편술사', role: '만능 마법사', emblem: 'shard', css: '#8fb3f0', energy: null, ultDur: 6,
     trait: { name: '마력 순환', desc: '스킬을 쓰면 2초 동안 공격 속도가 40% 빨라집니다.' },
     basic: { name: '파편탄', icon: 'shard', desc: '빠르게 연사하는 마력 파편' },
+    stats(s) { s.dmg = 12; },
     skills: [
       { name: '파편 창', icon: 'spear', kind: 'charge', cd: 3.2, desc: '오래 모을수록 굵고 아파지는, 지형을 뚫는 관통 광선',
         line: (ch, s) => ({ len: 28, w: (0.15 + ch * 1.2) * s.lanceWidth }),
         use(h, a) { h.facing = a.ang; h.fireLance(a.ch); } },
       { name: '서리 노바', icon: 'snow', kind: 'self', cd: 9, desc: '주변 7.5m의 적을 얼리고 밀어냄', use(h) { h.nova(); } },
-      { name: '운석', icon: 'meteor', kind: 'place', cd: 11, range: 22, ring: (s) => 5 * s.meteorRadius, desc: '정한 자리에 떨어져 불바다를 남김',
+      { name: '운석', icon: 'meteor', kind: 'place', cd: 12, range: 22, ring: (s) => 5 * s.meteorRadius, desc: '정한 자리에 떨어져 불바다를 남김',
         use(h, a) { if (h.auth) h.castMeteor(a.x, a.z); } },
     ],
     ult: { name: '파편 강림', icon: 'crystal', desc: '조준한 곳에 하늘에서 거대한 마력 수정을 떨어뜨림: 6.5m 안의 적에게 큰 피해와 1.2초 빙결. 수정은 5초 동안 땅에 박혀 주변 적에게 파편을 쏘아대고, 마지막에 산산이 부서지며 폭발' },
@@ -152,7 +153,7 @@
 
   // ---------- 2. guardian: holds the line ----------
   def({
-    id: 'guardian', tier: 2, name: '수호기사', role: '방패로 동료를 지키는 탱커', emblem: 'shield', css: '#f6d27a', energy: 0xffd98a, ultDur: 6, orb: false, size: 1.04,
+    id: 'guardian', tier: 2, name: '수호기사', role: '방패로 동료를 지키는 탱커', emblem: 'shield', css: '#f6d27a', energy: 0xffd98a, ultDur: 5, orb: false, size: 1.04,
     trait: { name: '불굴', desc: '받는 피해가 20% 줄고, 6m 안의 동료도 받는 피해가 10% 줄어듭니다.' },
     basic: { name: '성광 망치', icon: 'hammer', desc: '앞쪽을 크게 휘둘러 맞은 적을 모두 밀쳐내는 근접 공격', melee: { r: 3.6, arc: 2.1 }, knock: 9, sfx: 'swingHeavy' },
     stats(s) { s.maxHp = 160; s.armor += 5; s.speed *= 0.92; s.dmg = 30; s.fireRate = 2.1; },
@@ -193,7 +194,7 @@
           });
         } },
     ],
-    ult: { name: '성채 강림', icon: 'castle', desc: '망치로 땅을 내려쳐 주변 적을 날려 보내고(1.2초 기절), 그 자리에 6초 동안 황금 성벽을 둘러 세움: 적은 성 안으로 들어오지 못하고 적 탄은 성벽에 막힘. 안의 동료는 받는 피해 40% 감소와 회복. 끝나면 성벽이 바깥으로 무너지며 깔아뭉갬' },
+    ult: { name: '성채 강림', icon: 'castle', desc: '망치로 땅을 내려쳐 주변 적을 날려 보내고(1.2초 기절), 그 자리에 5초 동안 황금 성벽을 둘러 세움: 적은 성 안으로 들어오지 못하고 적 탄은 성벽에 막힘. 안의 동료는 받는 피해 40% 감소와 회복. 끝나면 성벽이 바깥으로 무너지며 깔아뭉갬' },
     chanStart(h) { h.bStore = 0; if (shows(h)) vb(h, 'gdRaise', R1(h.x), R1(h.z), h.key); },
     chanEnd(h, i, cancel) {
       if (cancel) return;
@@ -211,7 +212,7 @@
     ultStart(h) {
       const s = h.stats, r = 7.5;
       G.Net.vis('ultFx', 'guardian', R1(h.x), R1(h.z), h.key);
-      G.Net.vis('gdFort', uid(h), R1(h.x), R1(h.z), r, 6, h.key);
+      G.Net.vis('gdFort', uid(h), R1(h.x), R1(h.z), r, 5, h.key);
       // the blow that raises it throws everything out past the walls
       C.forEachTarget(h.x, h.z, r, (t) => {
         const dx = t.x - h.x, dz = t.z - h.z, d = Math.hypot(dx, dz) || 1;
@@ -281,7 +282,7 @@
     id: 'ranger', tier: 2, name: '매사냥꾼', role: '매와 함께 멀리서 노리는 명사수', emblem: 'bird', css: '#8fdcb3', energy: 0xa8f07a, ultDur: 3.4, orb: false,
     trait: { name: '명사수', desc: '14m보다 먼 적에게 주는 피해 +20%. 치명타를 맞은 적에게 4초 동안 표식: 표식된 적은 모두에게 10% 더 아프게 맞습니다.' },
     basic: { name: '사냥 화살', icon: 'arrow', desc: '멀리 날아가 적 하나를 꿰뚫는 화살', spread: 0.06, sfx: 'bow' },
-    stats(s) { s.maxHp = 90; s.speed *= 1.05; s.dmg = 16; s.fireRate = 3.1; s.projSpeed = 52; s.projLife = 0.78; s.projSize = 0.9; s.pierce += 1; s.crit += 0.06; },
+    stats(s) { s.maxHp = 90; s.speed *= 1.05; s.dmg = 14; s.fireRate = 3.1; s.projSpeed = 52; s.projLife = 0.78; s.projSize = 0.9; s.pierce += 1; s.crit += 0.05; },
     skills: [
       { name: '저격 화살', icon: 'bow', kind: 'charge', cd: 4.5, chargeTime: 1.2, line: (ch, s) => ({ len: 45, w: Math.max(0.2, 1.5 - ch * 1.25) * (0.8 + 0.2 * s.lanceWidth) }),
         desc: '활을 끝까지 당길수록 강한 화살 한 발. 멀리 날아갈수록 피해가 커지고(최대 +40%), 끝까지 당기면 반드시 치명타에 맞은 적 모두 표식',
@@ -345,7 +346,7 @@
   function snipeArrow(h, x, z, ang, ch, cos) {
     const s = h.stats, full = ch > 0.95;
     G.Proj.spawnPlayer({ x: x + Math.cos(ang) * 0.8, z: z + Math.sin(ang) * 0.8, y: hy(x, z) + 1.35, angle: ang, speed: 92, life: 0.5,
-      dmg: (30 + 108 * ch) * s.lanceMult * s.dmgMult, size: (1.5 + ch * 0.8) * (0.85 + 0.15 * s.lanceWidth), pierce: 99, color: full ? 0xffffff : 0xd8ffb0,
+      dmg: (28 + 96 * ch) * s.lanceMult * s.dmgMult, size: (1.5 + ch * 0.8) * (0.85 + 0.15 * s.lanceWidth), pierce: 99, color: full ? 0xffffff : 0xd8ffb0,
       source: 'snipe', procs: full, by: h, cos, knock: 5 + 8 * ch, grow: 0.012, crit: full, mark: full ? 4 : 0 });
   }
 
@@ -564,7 +565,7 @@
     id: 'berserker', tier: 1, name: '광전사', role: '피를 볼수록 강해지는 근접 전사', emblem: 'axe', css: '#e0765a', energy: 0xff5a3a, ultDur: 1.8, orb: false, size: 1.06,
     trait: { name: '피의 갈증', desc: '잃은 체력만큼 피해와 공격 속도가 최대 50% 늘고, 근접 공격 피해의 6%만큼 체력을 회복합니다.' },
     basic: { name: '쌍도끼', icon: 'axe', desc: '앞쪽을 빠르게 베어 가르는 근접 연타', melee: { r: 3.0, arc: 2.3 }, knock: 4, sfx: 'swing' },
-    stats(s) { s.maxHp = 140; s.armor += 2; s.speed *= 1.05; s.dmg = 22; s.fireRate = 2.6; s.crit += 0.05; },
+    stats(s) { s.maxHp = 140; s.armor += 2; s.speed *= 1.05; s.dmg = 21; s.fireRate = 2.6; s.crit += 0.05; },
     cardOff: MELEE_OFF, cardAlt: MELEE_ALT,
     skills: [
       { name: '소용돌이', icon: 'whirl', kind: 'channel', cd: 7, max: 3, moveK: 0.85,
@@ -632,7 +633,7 @@
       h.wTick = 0.2;
       C.forEachTarget(h.x, h.z, r, (t) => {
         const dx = t.x - h.x, dz = t.z - h.z, d = Math.hypot(dx, dz) || 1;
-        C.damage(t, 12 * s.lanceMult * s.dmgMult, { source: 'whirl', by: h, kx: dx / d, kz: dz / d, knock: 3 });
+        C.damage(t, 11 * s.lanceMult * s.dmgMult, { source: 'whirl', by: h, kx: dx / d, kz: dz / d, knock: 3 });
       });
     },
     chanEnd(h) { h.spinA = 0; },
@@ -649,11 +650,11 @@
         C.forEachTarget(h.x, h.z, r, (t) => {
           if (!inCone(h, t, a, 1.75)) return;
           const dx = t.x - h.x, dz = t.z - h.z, d = Math.hypot(dx, dz) || 1;
-          C.damage(t, (90 + 130 * k) * s.dmgMult, { kx: dx / d, kz: dz / d, knock: 16, source: 'ult', by: h });
+          C.damage(t, (80 + 110 * k) * s.dmgMult, { kx: dx / d, kz: dz / d, knock: 16, source: 'ult', by: h });
           stun(t, 1);
         });
         const x0 = h.x, z0 = h.z;
-        G.Enemies.later(0.15, () => C.line(x0, z0, a, 18, 4.5, (t) => C.damage(t, (40 + 60 * k) * s.dmgMult, { kx: Math.cos(a), kz: Math.sin(a), knock: 10, source: 'ult', cls: 'burn', by: h })));
+        G.Enemies.later(0.15, () => C.line(x0, z0, a, 18, 4.5, (t) => C.damage(t, (35 + 50 * k) * s.dmgMult, { kx: Math.cos(a), kz: Math.sin(a), knock: 10, source: 'ult', cls: 'burn', by: h })));
       });
     },
     ultTick(h) { h.ultTick = 1; },
@@ -773,7 +774,7 @@
     id: 'assassin', tier: 3, name: '그림자 암살자', role: '그림자에서 급소를 노리는 자객', emblem: 'mask', css: '#a98be6', energy: 0xb07aff, ultDur: 1.6, orb: false, size: 0.97, bare: ['shoulders'],
     trait: { name: '급소', desc: '체력이 30% 아래인 적에게 피해 1.5배(보스는 1.25배). 은신 중 첫 공격은 반드시 치명타에 피해 2.5배.' },
     basic: { name: '쌍단검', icon: 'dagger', desc: '두 단검을 번갈아 앞으로 빠르게 찌르는 근접 공격. 폭은 좁지만 3.6m까지 길게 닿음', melee: { r: 3.6, arc: 0.85 }, knock: 2, sfx: 'knife', color: 0xc8a0ff },
-    stats(s) { s.maxHp = 90; s.armor += 1; s.speed *= 1.12; s.dmg = 19; s.fireRate = 4.2; s.crit += 0.08; s.critMult += 0.25; },
+    stats(s) { s.maxHp = 90; s.armor += 1; s.speed *= 1.12; s.dmg = 18; s.fireRate = 4.2; s.crit += 0.08; s.critMult += 0.25; },
     cardOff: MELEE_OFF, cardAlt: MELEE_ALT,
     skills: [
       { name: '그림자 걸음', icon: 'blink', kind: 'aim', cd: 4.5, range: 11, line: (ch, s) => ({ len: 11 * (0.9 + 0.1 * s.lanceWidth), w: 1.2 }),
@@ -848,7 +849,7 @@
       G.Enemies.later(STAR_BOOM, () => {
         const list = [];
         C.forEachTarget(p.x, p.z, R + 1, (t) => list.push(t));
-        for (const t of list) C.damage(t, 100 * s.dmgMult, { source: 'ult', cls: 'crit', by: h });
+        for (const t of list) C.damage(t, 90 * s.dmgMult, { source: 'ult', cls: 'crit', by: h });
         for (const t of list) {
           if (!t.alive || t.isBoss || hpFrac(t) >= 0.2) continue;
           G.Net.vis('asExec', R1(t.x), R1(t.z));
@@ -857,7 +858,7 @@
         // the coup de grâce on whoever is strongest
         let best = null, bk = -1;
         C.forEachTarget(p.x, p.z, R + 2, (t) => { const k = (t.isBoss ? 1e7 : 0) + (t.elite ? 1e5 : 0) + (t.hp || 0); if (k > bk) { bk = k; best = t; } });
-        if (best) { G.Net.vis('asCut', R1(p.x), R1(p.z), R1(best.x), R1(best.z)); C.damage(best, 150 * s.dmgMult, { crit: true, source: 'ult', by: h }); }
+        if (best) { G.Net.vis('asCut', R1(p.x), R1(p.z), R1(best.x), R1(best.z)); C.damage(best, 130 * s.dmgMult, { crit: true, source: 'ult', by: h }); }
       });
     },
     ultTick(h) { h.ultTick = 1; },
@@ -948,7 +949,7 @@
           G.Net.vis('chHaste', R1(dur), ...keys);
         } },
     ],
-    ult: { name: '멈춘 시간', icon: 'clock', desc: '발밑에 거대한 시계가 펼쳐지며 4초 동안 모든 적과 적 탄이 멈춤(보스는 크게 느려짐). 멈춘 동안 적이 받은 피해는 쌓여 두었다가, 시간이 다시 흐르는 순간 한 번 더 한꺼번에 터지고 시계 둘레 12m에 충격파' },
+    ult: { name: '멈춘 시간', icon: 'clock', desc: '발밑에 거대한 시계가 펼쳐지며 4초 동안 모든 적과 적 탄이 멈춤(보스는 크게 느려짐). 멈춘 동안 적이 받은 피해의 60%가 쌓여 있다가 시간이 다시 흐르는 순간 한꺼번에 터지고, 시계 둘레 12m에 충격파' },
     ultStart(h) {
       G.Net.vis('ultFx', 'chrono', R1(h.x), R1(h.z), h.key);
       G.Net.vis('chStop', 4, R1(h.x), R1(h.z), h.key);
@@ -1002,7 +1003,7 @@
     id: 'gunslinger', tier: 2, name: '총잡이', role: '여섯 발로 승부하는 무법자', emblem: 'gun', css: '#e8c07a', energy: 0xffc46a, ultDur: 1.6, orb: false, ammo: 6,
     trait: { name: '마지막 한 발', desc: '탄창의 마지막 한 발은 피해 2배에 반드시 치명타. 재장전이 끝나면 1.5초 동안 이동 속도 +20%.' },
     basic: { name: '리볼버', icon: 'gun', desc: '여섯 발을 다 쏘면 재장전(약 1.1초). 남은 탄은 저절로 채워지지 않음', spread: 0.05, sfx: 'gun' },
-    stats(s) { s.maxHp = 100; s.speed *= 1.05; s.dmg = 26; s.fireRate = 5.2; s.projSpeed = 64; s.projLife = 0.5; s.projSize = 0.8; s.crit += 0.08; },
+    stats(s) { s.maxHp = 100; s.speed *= 1.05; s.dmg = 25; s.fireRate = 5.2; s.projSpeed = 64; s.projLife = 0.5; s.projSize = 0.8; s.crit += 0.08; },
     skills: [
       { name: '패닝', icon: 'fan', kind: 'aim', cd: 6, line: () => ({ len: 20, w: 7 }),
         desc: '남은 총알을 조준한 쪽 부채꼴로 순식간에 모두 쏟아붓고 바로 재장전(한 발당 피해 +30%)',
@@ -2076,7 +2077,7 @@
     let n = 0;
     for (const [t, amt] of owed) {
       if (n++ < 14) G.Net.vis('chDebt', R1(t.x), R1(t.z));
-      C.damage(t, amt, { canCrit: false, source: 'ult', cls: 'chain', by: h });
+      C.damage(t, amt * 0.6, { canCrit: false, source: 'ult', cls: 'chain', by: h });
     }
     if (at) C.forEachTarget(at.x, at.z, 12, (t) => {
       const dx = t.x - at.x, dz = t.z - at.z, d = Math.hypot(dx, dz) || 1;
@@ -2464,8 +2465,8 @@
         const st = o.stats;
         G.Enemies.later(0.3, () => C.forEachTarget(bx, bz, 2.6, (q) => {
           const [kx, kz] = outward(q, bx, bz);
-          C.damage(q, 30 * st.dmgMult, { canCrit: false, source: 'ult', cls: 'burn', by: o, kx, kz, knock: 4 });
-          if (q.applyStatus) q.applyStatus('burn', 8, 3);
+          C.damage(q, 24 * st.dmgMult, { canCrit: false, source: 'ult', cls: 'burn', by: o, kx, kz, knock: 4 });
+          if (q.applyStatus) q.applyStatus('burn', 6, 3);
         }));
       }
       // down into the middle of it all
@@ -2484,11 +2485,11 @@
           const st = o.stats, x0 = s.x, z0 = s.z;
           C.forEachTarget(x0, z0, 7, (q) => {
             const [kx, kz] = outward(q, x0, z0);
-            C.damage(q, 90 * st.dmgMult, { kx, kz, knock: 12, source: 'ult', cls: 'burn', by: o });
-            if (q.applyStatus) q.applyStatus('burn', 10, 4);
+            C.damage(q, 75 * st.dmgMult, { kx, kz, knock: 12, source: 'ult', cls: 'burn', by: o });
+            if (q.applyStatus) q.applyStatus('burn', 7, 4);
           });
           CL.zones.push({ x: x0, z: z0, r: 5.5, t: 4, every: 0.4, tick: 0.3, by: o, fn(zn) {
-            C.forEachTarget(zn.x, zn.z, zn.r, (q) => { C.damage(q, 5 * st.dmgMult, { canCrit: false, source: 'zone', cls: 'burn', by: o }); if (q.applyStatus) q.applyStatus('burn', 5, 2); });
+            C.forEachTarget(zn.x, zn.z, zn.r, (q) => { C.damage(q, 4 * st.dmgMult, { canCrit: false, source: 'zone', cls: 'burn', by: o }); if (q.applyStatus) q.applyStatus('burn', 4, 2); });
           } });
         }
       }

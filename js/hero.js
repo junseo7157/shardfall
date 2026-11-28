@@ -185,7 +185,7 @@
       zn.t -= dt; zn.tick -= dt;
       if (zn.tick <= 0) {
         zn.tick = 0.4;
-        C.forEachTarget(zn.x, zn.z, zn.r, (tg) => C.damage(tg, 10 * zn.by.stats.meteorMult * zn.by.stats.dmgMult, { canCrit: false, source: 'zone', cls: 'burn', by: zn.by }));
+        C.forEachTarget(zn.x, zn.z, zn.r, (tg) => C.damage(tg, 8 * zn.by.stats.meteorMult * zn.by.stats.dmgMult, { canCrit: false, source: 'zone', cls: 'burn', by: zn.by }));
       }
       if (zn.t <= 0) HS.zones.splice(i, 1);
     }
@@ -476,7 +476,7 @@
       const width = (1.1 + ch * 1.0) * s.lanceWidth, len = 28, a = this.facing;
       G.Net.visBy(this.key, 'lance', U.r1(this.x), U.r1(this.z), U.r2(a), U.r2(width), ch > 0.95 ? 1 : 0, this.colorIdx, this.key);
       if (this.auth) {
-        const dmg = (38 + 150 * ch) * s.lanceMult * s.dmgMult;
+        const dmg = (34 + 132 * ch) * s.lanceMult * s.dmgMult;
         C.line(this.x, this.z, a, len, width, (t) => {
           C.damage(t, dmg, { kx: Math.cos(a), kz: Math.sin(a), knock: 6 + ch * 10, source: 'lance', procs: ch > 0.95, by: this });
           G.FX.spark(t.x, 1.2, t.z, 0xfff1d0, 8, 9);
@@ -506,7 +506,7 @@
         if (!G.auth()) return;
         C.forEachTarget(tx, tz, r, (t) => {
           const dx = t.x - tx, dz = t.z - tz, dd = Math.hypot(dx, dz) || 1;
-          C.damage(t, 120 * s.meteorMult * s.dmgMult * (1 - 0.5 * Math.min(1, dd / r)), { kx: dx / dd, kz: dz / dd, knock: 14, source: 'meteor', by: this });
+          C.damage(t, 100 * s.meteorMult * s.dmgMult * (1 - 0.5 * Math.min(1, dd / r)), { kx: dx / dd, kz: dz / dd, knock: 14, source: 'meteor', by: this });
         });
         if (this === G.Player) G.Game.hitstop(0.06);
         HS.zones.push({ x: tx, z: tz, r: r * 0.75, t: 3, tick: 0, by: this });
